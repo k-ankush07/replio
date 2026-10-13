@@ -1,4 +1,11 @@
 import React, { useState, useEffect, useRef, useContext, createContext } from "react";
+import {
+  ArrowDown, ArrowRight, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Circle,
+  Columns2, Copy, Eye, FileText, Grid2X2, Heading1, Heading2, Heading3,
+  Image, Layers3, List, Minus, Monitor, MousePointer2, PanelsTopLeft, Play,
+  Plus, Redo2, Search, Settings, Square, Star, Trash2, Type, Undo2, Upload,
+  WrapText, X,
+} from "lucide-react";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -19,39 +26,54 @@ const DEVICE_PRESETS = {
 };
 
 /* ------------------------------ icons ------------------------------ */
-const PATHS = {
-  sections: ["M4 5h16v4H4z", "M4 13h16v6H4z"],
-  plus: ["M12 5v14", "M5 12h14"],
-  layers: ["M12 3l9 5-9 5-9-5 9-5z", "M3 13l9 5 9-5"],
-  image: ["M4 4h16v16H4z", "M4 16l5-5 4 4 3-3 4 4", "M9 8h.01"],
-  play: ["M8 5l11 7-11 7z"],
-  undo: ["M9 14L4 9l5-5", "M4 9h10a6 6 0 010 12h-3"],
-  redo: ["M15 14l5-5-5-5", "M20 9H10a6 6 0 000 12h3"],
-  gear: [
-    "M12 15a3 3 0 100-6 3 3 0 000 6z",
-    "M19 12a7 7 0 00-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 00-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 00-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 005 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-1a7 7 0 002 1.2l.4 2.7h4l.4-2.7a7 7 0 002-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z",
-  ],
-  devices: ["M4 5h16v11H4z", "M8 20h8", "M12 16v4"],
-  left: ["M15 6l-6 6 6 6"],
-  trash: ["M4 7h16", "M9 7V4h6v3", "M6 7l1 13h10l1-13"],
-  copy: ["M9 9h11v11H9z", "M5 15V4h11"],
-  up: ["M6 15l6-6 6 6"],
-  down: ["M6 9l6 6 6-6"],
-  eye: ["M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z", "M12 15a3 3 0 100-6 3 3 0 000 6z"],
-  upload: ["M12 16V4", "M7 9l5-5 5 5", "M4 20h16"],
-  search: ["M11 18a7 7 0 100-14 7 7 0 000 14z", "M21 21l-5-5"],
-  close: ["M6 6l12 12", "M18 6L6 18"],
+const ICONS = {
+  sections: PanelsTopLeft,
+  plus: Plus,
+  layers: Layers3,
+  image: Image,
+  play: Play,
+  undo: Undo2,
+  redo: Redo2,
+  gear: Settings,
+  devices: Monitor,
+  left: ChevronLeft,
+  trash: Trash2,
+  copy: Copy,
+  up: ArrowUp,
+  down: ChevronDown,
+  right: ChevronRight,
+  check: Check,
+  arrowDown: ArrowDown,
+  arrowRight: ArrowRight,
+  wrap: WrapText,
+  eye: Eye,
+  upload: Upload,
+  search: Search,
+  close: X,
+  text: Type,
+  heading1: Heading1,
+  heading2: Heading2,
+  heading3: Heading3,
+  list: List,
+  rating: Star,
+  container: Square,
+  button: MousePointer2,
+  grid: Grid2X2,
+  divider: Minus,
+  icon: Circle,
+  column: Columns2,
+  page: FileText,
+  heading: Heading1,
 };
-const Ico = ({ n, size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    {PATHS[n].map((d, i) => <path key={i} d={d} />)}
-  </svg>
-);
+const Ico = ({ n, size = 18, ...props }) => {
+  const Icon = ICONS[n];
+  return Icon ? <Icon size={size} strokeWidth={1.8} aria-hidden="true" {...props} /> : null;
+};
 
 /* ------------------------- node factories -------------------------- */
 const node = (type, name, props = {}, base = {}, children = [], mob = {}, tab = {}) => ({
   id: uid(),
-  type, // container | text | heading | button | image | list | hr | stars | circle | icon
+  type, 
   name,
   props,
   s: { base, tablet: tab, mobile: mob, hover: {} },
@@ -96,29 +118,29 @@ const grid = (name, cols, children, extra = {}) =>
 
 /* ---------------------------- components --------------------------- */
 const COMPONENTS = [
-  { key: "text", label: "Text", glyph: "T", build: () => T("Write your text here") },
-  { key: "h1", label: "Heading 1", glyph: "H1", build: () => H("Heading 1", 48, {}, {}, "h1") },
-  { key: "h2", label: "Heading 2", glyph: "H2", build: () => H("Heading 2", 36) },
-  { key: "h3", label: "Heading 3", glyph: "H3", build: () => H("Heading 3", 24, {}, {}, "h3") },
+  { key: "text", label: "Text", glyph: "text", build: () => T("Write your text here") },
+  { key: "h1", label: "Heading 1", glyph: "heading1", build: () => H("Heading 1", 48, {}, {}, "h1") },
+  { key: "h2", label: "Heading 2", glyph: "heading2", build: () => H("Heading 2", 36) },
+  { key: "h3", label: "Heading 3", glyph: "heading3", build: () => H("Heading 3", 24, {}, {}, "h3") },
   {
-    key: "list", label: "Bulleted List", glyph: "•≡",
+    key: "list", label: "Bulleted List", glyph: "list",
     build: () => node("list", "List", { items: ["First benefit", "Second benefit", "Third benefit"] }, { listStyle: "disc", paddingLeft: "24px", color: "#374151", lineHeight: "1.8" }),
   },
-  { key: "starstext", label: "Stars + Text", glyph: "★T", build: () => Row("Stars + Text", [Stars(5), T("4.9 from 2,000+ reviews", { fontSize: "14px" })], { alignItems: "center", gap: "8px" }, { flexDirection: "row" }) },
-  { key: "image", label: "Image", glyph: "▣", build: () => Img(ph(800, 600), { height: "auto" }) },
-  { key: "container", label: "Container", glyph: "▭", build: () => Box("Container", [], { padding: "24px", border: "1px dashed #d1d5db", borderRadius: "8px" }) },
-  { key: "button", label: "Button", glyph: "Btn", build: () => Btn("Click me") },
+  { key: "starstext", label: "Stars + Text", glyph: "rating", build: () => Row("Stars + Text", [Stars(5), T("4.9 from 2,000+ reviews", { fontSize: "14px" })], { alignItems: "center", gap: "8px" }, { flexDirection: "row" }) },
+  { key: "image", label: "Image", glyph: "image", build: () => Img(ph(800, 600), { height: "auto" }) },
+  { key: "container", label: "Container", glyph: "container", build: () => Box("Container", [], { padding: "24px", border: "1px dashed #d1d5db", borderRadius: "8px" }) },
+  { key: "button", label: "Button", glyph: "button", build: () => Btn("Click me") },
   {
-    key: "imggrid", label: "Image Grid", glyph: "▦",
+    key: "imggrid", label: "Image Grid", glyph: "grid",
     build: () => grid("Image Grid", 2, [1, 2, 3, 4].map((i) => Img(ph(400, 400, "Image " + i), { height: "auto", aspectRatio: "1 / 1" })), { gap: "12px" }),
   },
-  { key: "rating", label: "Star Rating", glyph: "★", build: () => Stars(5) },
-  { key: "hr", label: "Horizontal Rule", glyph: "—", build: () => node("hr", "Divider", {}, { width: "100%", height: "1px", background: "#e5e7eb", border: "none" }) },
-  { key: "icon", label: "Icon", glyph: "☺", build: () => node("icon", "Icon", { text: "⭐" }, { fontSize: "32px" }) },
-  { key: "circle", label: "Circle", glyph: "●", build: () => node("circle", "Circle", {}, { width: "64px", height: "64px", borderRadius: "9999px", background: "#2563eb" }) },
-  { key: "col1", label: "1 Column", glyph: "▬", build: () => grid("1 Column", 1, [Box("Column", [], { padding: "16px", border: "1px dashed #d1d5db" })]) },
-  { key: "col2", label: "2 Columns", glyph: "▬▬", build: () => grid("2 Columns", 2, [1, 2].map(() => Box("Column", [], { padding: "16px", border: "1px dashed #d1d5db" }))) },
-  { key: "col3", label: "3 Columns", glyph: "▬▬▬", build: () => grid("3 Columns", 3, [1, 2, 3].map(() => Box("Column", [], { padding: "16px", border: "1px dashed #d1d5db" }))) },
+  { key: "rating", label: "Star Rating", glyph: "rating", build: () => Stars(5) },
+  { key: "hr", label: "Horizontal Rule", glyph: "divider", build: () => node("hr", "Divider", {}, { width: "100%", height: "1px", background: "#e5e7eb", border: "none" }) },
+  { key: "icon", label: "Icon", glyph: "icon", build: () => node("icon", "Icon", { text: "⭐" }, { fontSize: "32px" }) },
+  { key: "circle", label: "Circle", glyph: "circle", build: () => node("circle", "Circle", {}, { width: "64px", height: "64px", borderRadius: "9999px", background: "#2563eb" }) },
+  { key: "col1", label: "1 Column", glyph: "column", build: () => grid("1 Column", 1, [Box("Column", [], { padding: "16px", border: "1px dashed #d1d5db" })]) },
+  { key: "col2", label: "2 Columns", glyph: "column", build: () => grid("2 Columns", 2, [1, 2].map(() => Box("Column", [], { padding: "16px", border: "1px dashed #d1d5db" }))) },
+  { key: "col3", label: "3 Columns", glyph: "column", build: () => grid("3 Columns", 3, [1, 2, 3].map(() => Box("Column", [], { padding: "16px", border: "1px dashed #d1d5db" }))) },
 ];
 
 /* ----------------------------- sections ---------------------------- */
@@ -304,7 +326,7 @@ ${body}
 const Ctx = createContext({ preview: false });
 
 /* ------------------------------ renderer --------------------------- */
-function Render({ n, device }) {
+function Render({ n, device, isPageSection = false }) {
   const c = useContext(Ctx);
   const [hov, setHov] = useState(false);
   if (n.hide[device]) return null;
@@ -315,10 +337,14 @@ function Render({ n, device }) {
   const p = n.props;
   const empty = n.type === "container" && n.children.length === 0;
 
+  if (st.minWidth == null) st.minWidth = "0";
   if (c.preview) st.transition = "all .15s ease";
   if (n.type === "text" && !st.whiteSpace) st.whiteSpace = "pre-wrap";
   if (!c.preview) {
     if (isSel) { st.outline = "2px solid #2563eb"; st.outlineOffset = "-2px"; }
+    else if (isPageSection && c.dropTarget?.id === n.id) {
+      st.boxShadow = c.dropTarget.position === "before" ? "inset 0 4px #2563eb" : "inset 0 -4px #2563eb";
+    }
     else if (hov) { st.outline = "1px solid #93c5fd"; st.outlineOffset = "-1px"; }
     else if (empty) st.outline = "1px dashed #cbd5e1";
     if (empty && !st.minHeight) st.minHeight = "56px";
@@ -342,6 +368,27 @@ function Render({ n, device }) {
     "aria-label": p.ariaLabel || undefined,
     "data-node": n.id,
     onClick,
+    draggable: isPageSection && !c.preview,
+    onDragStart: isPageSection && !c.preview ? (e) => {
+      e.dataTransfer.setData("text/x-node", n.id);
+      e.dataTransfer.effectAllowed = "move";
+    } : undefined,
+    onDragEnd: isPageSection && !c.preview ? c.clearDropTarget : undefined,
+    onDragOver: (e) => {
+      if (!c.preview && isPageSection && e.dataTransfer.types.includes("text/x-node")) {
+        c.dragOverNode(e, n.id);
+        return;
+      }
+      if (!c.preview && e.dataTransfer.types.includes("text/x-asset")) e.preventDefault();
+    },
+    onDrop: (e) => {
+      if (!c.preview && isPageSection && e.dataTransfer.types.includes("text/x-node")) {
+        e.stopPropagation();
+        c.dropNode(e, n.id);
+        return;
+      }
+      if (!c.preview && e.dataTransfer.types.includes("text/x-asset")) c.dropAsset(e, n.id);
+    },
     onMouseEnter: () => setHov(true),
     onMouseLeave: () => setHov(false),
   };
@@ -360,8 +407,25 @@ function Render({ n, device }) {
     case "icon": return <span {...common}>{p.text}</span>;
     default: {
       const dropProps = c.preview ? {} : {
-        onDragOver: (e) => { e.preventDefault(); e.stopPropagation(); },
-        onDrop: (e) => { e.stopPropagation(); c.drop(e, n.id); },
+        onDragOver: (e) => {
+          if (e.dataTransfer.types.includes("text/x-node")) {
+            if (isPageSection) c.dragOverNode(e, n.id);
+            return;
+          }
+          e.preventDefault();
+          e.stopPropagation();
+        },
+        onDrop: (e) => {
+          if (e.dataTransfer.types.includes("text/x-node")) {
+            if (isPageSection) {
+              e.stopPropagation();
+              c.dropNode(e, n.id);
+            }
+            return;
+          }
+          e.stopPropagation();
+          c.drop(e, n.id);
+        },
       };
       return React.createElement(
         p.tag || "div",
@@ -380,7 +444,7 @@ const Section = ({ title, children, open: o0 = true }) => {
   return (
     <div className="border-b border-gray-100 py-3">
       <button onClick={() => setO(!o)} className="flex w-full items-center gap-1 text-left text-[13px] font-semibold text-gray-800">
-        <span className="w-3 text-gray-400">{o ? "⌄" : "›"}</span>{title}
+        <span className="flex w-3 text-gray-400"><Ico n={o ? "down" : "right"} size={13} /></span>{title}
       </button>
       {o && <div className="mt-3 space-y-3">{children}</div>}
     </div>
@@ -456,12 +520,12 @@ function LayerItem({ n, depth, api, selectedId }) {
   const [open, setOpen] = useState(true);
   const [edit, setEdit] = useState(false);
   const sel = selectedId === n.id;
-  const glyph = { container: "▭", text: "T", heading: "H", button: "B", image: "▣", list: "≡", hr: "—", stars: "★", circle: "●", icon: "☺" }[n.type];
+  const glyph = { container: "container", text: "text", heading: "heading", button: "button", image: "image", list: "list", hr: "divider", stars: "rating", circle: "circle", icon: "icon" }[n.type];
   return (
     <div>
       <div onClick={() => api.select(n.id)} className={`group flex cursor-pointer items-center gap-1 rounded-md py-1 pr-1 text-xs ${sel ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`} style={{ paddingLeft: 4 + depth * 14 }}>
-        <button onClick={(e) => { e.stopPropagation(); setOpen(!open); }} className={`w-4 text-gray-400 ${n.children.length ? "" : "invisible"}`}>{open ? "⌄" : "›"}</button>
-        <span className="w-4 text-center text-gray-400">{glyph}</span>
+        <button onClick={(e) => { e.stopPropagation(); setOpen(!open); }} className={`flex w-4 items-center justify-center text-gray-400 ${n.children.length ? "" : "invisible"}`}><Ico n={open ? "down" : "right"} size={13} /></button>
+        <span className="flex w-4 justify-center text-gray-400"><Ico n={glyph} size={14} /></span>
         {edit ? (
           <input autoFocus defaultValue={n.name} onClick={(e) => e.stopPropagation()} onBlur={(e) => { api.rename(n.id, e.target.value || n.name); setEdit(false); }}
             onKeyDown={(e) => e.key === "Enter" && e.target.blur()} className="min-w-0 flex-1 rounded border border-blue-400 px-1 text-xs outline-none" />
@@ -488,7 +552,7 @@ const SearchBox = ({ value, onChange, placeholder }) => (
     <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full bg-transparent text-xs text-gray-800 outline-none" />
   </div>
 );
-function SectionsPanel({ onAdd }) {
+function SectionsPanel({ onAdd, onDragStateChange }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(null);
   const list = SECTIONS.filter((s) => (s.name + s.desc + s.items.map((i) => i.name).join(" ")).toLowerCase().includes(q.toLowerCase()));
@@ -500,12 +564,20 @@ function SectionsPanel({ onAdd }) {
           <div key={s.id}>
             <button onClick={() => setOpen(open === s.id ? null : s.id)} className="flex w-full items-center justify-between rounded-lg p-2 text-left hover:bg-gray-50">
               <span><span className="block text-[13px] font-semibold text-gray-900">{s.name}</span><span className="block text-xs text-gray-500">{s.desc}</span></span>
-              <span className="text-gray-400">{open === s.id || q ? "⌄" : "›"}</span>
+              <span className="text-gray-400"><Ico n={open === s.id || q ? "down" : "right"} size={14} /></span>
             </button>
             {(open === s.id || q) && (
               <div className="mb-1 ml-2 space-y-1 border-l border-gray-100 pl-2">
-                {s.items.map((it) => (
-                  <button key={it.name} onClick={() => onAdd(it.build())} className="block w-full rounded-md border border-gray-200 px-2 py-2 text-left text-xs text-gray-700 hover:border-blue-400 hover:bg-blue-50">+ {it.name}</button>
+                {s.items.map((it, index) => (
+                  <button key={it.name} draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/x-section", `${s.id}:${index}`);
+                      e.dataTransfer.effectAllowed = "copy";
+                      onDragStateChange(true);
+                    }}
+                    onDragEnd={() => onDragStateChange(false)}
+                    onClick={() => onAdd(it.build())}
+                    className="block w-full rounded-md border border-gray-200 px-2 py-2 text-left text-xs text-gray-700 hover:border-blue-400 hover:bg-blue-50">+ {it.name}</button>
                 ))}
               </div>
             )}
@@ -516,7 +588,7 @@ function SectionsPanel({ onAdd }) {
     </>
   );
 }
-function ComponentsPanel({ onAdd }) {
+function ComponentsPanel({ onAdd, onDragStateChange }) {
   const [q, setQ] = useState("");
   const list = COMPONENTS.filter((c) => c.label.toLowerCase().includes(q.toLowerCase()));
   return (
@@ -525,9 +597,12 @@ function ComponentsPanel({ onAdd }) {
       <p className="mt-2 text-[11px] text-gray-500">Click to add, or drag onto the canvas.</p>
       <div className="mt-2 grid grid-cols-2 gap-2 overflow-y-auto pr-1" style={{ maxHeight: "calc(100vh - 250px)" }}>
         {list.map((c) => (
-          <button key={c.key} draggable onDragStart={(e) => e.dataTransfer.setData("text/x-comp", c.key)} onClick={() => onAdd(c.build())}
+          <button key={c.key} draggable
+            onDragStart={(e) => { e.dataTransfer.setData("text/x-comp", c.key); e.dataTransfer.effectAllowed = "copy"; onDragStateChange(true); }}
+            onDragEnd={() => onDragStateChange(false)}
+            onClick={() => onAdd(c.build())}
             className="flex h-[84px] flex-col items-center justify-center gap-1 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 hover:border-blue-400 hover:bg-blue-50">
-            <span className="text-lg font-semibold text-blue-600">{c.glyph}</span>
+            <span className="text-blue-600"><Ico n={c.glyph} size={20} /></span>
             <span className="text-[11px]">{c.label}</span>
           </button>
         ))}
@@ -558,7 +633,9 @@ function AssetsPanel({ assets, setAssets, onUse }) {
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2 overflow-y-auto pr-1" style={{ maxHeight: "calc(100vh - 280px)" }}>
         {list.map((a) => (
-          <button key={a.id} onClick={() => onUse(a)} className="overflow-hidden rounded-lg border border-gray-200 text-left hover:border-blue-400">
+          <button key={a.id} draggable
+            onDragStart={(e) => { e.dataTransfer.setData("text/x-asset", a.id); e.dataTransfer.effectAllowed = "copy"; }}
+            onClick={() => onUse(a)} className="overflow-hidden rounded-lg border border-gray-200 text-left hover:border-blue-400">
             <img src={a.src} alt="" className="h-24 w-full object-cover" />
             <span className="block truncate px-1.5 py-1 text-[11px] text-gray-600">{a.name}</span>
           </button>
@@ -662,7 +739,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
                   </>
                 ) : (
                   <>
-                    <Seg value={cur.flexWrap === "wrap" ? "wrap" : axis} options={[{ value: "row", label: "→ Row" }, { value: "column", label: "↓ Col" }, { value: "wrap", label: "↩ Wrap" }]} onChange={setAxis} />
+                    <Seg value={cur.flexWrap === "wrap" ? "wrap" : axis} options={[{ value: "row", label: <span className="flex items-center justify-center gap-1"><Ico n="arrowRight" size={13} />Row</span> }, { value: "column", label: <span className="flex items-center justify-center gap-1"><Ico n="arrowDown" size={13} />Col</span> }, { value: "wrap", label: <span className="flex items-center justify-center gap-1"><Ico n="wrap" size={13} />Wrap</span> }]} onChange={setAxis} />
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 space-y-2">
                         <span className="text-xs text-gray-500">Spacing</span>
@@ -862,7 +939,7 @@ function DimPanel({ d, width, onChange, onClose }) {
             <button key={name} onClick={() => { onChange(w); setOpen(false); }}
               className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs hover:bg-gray-50 ${w === width ? "bg-gray-50" : ""}`}>
               <span>{name} <span className="text-gray-400">({w}px)</span></span>
-              {w === width && <span>✓</span>}
+              {w === width && <Ico n="check" size={14} />}
             </button>
           ))}
         </div>
@@ -896,9 +973,11 @@ export default function Editor() {
   const [leftTab, setLeftTab] = useState("sections");
   const [leftOpen, setLeftOpen] = useState(true);
   const [zoom, setZoom] = useState(50);
-  const [show, setShow] = useState({ desktop: true, tablet: false, mobile: true });
+  const [show, setShow] = useState({ desktop: true, tablet: true, mobile: true });
   const [widths, setWidths] = useState({ desktop: 1440, tablet: 810, mobile: 393 });
   const [assets, setAssets] = useState([]);
+  const [draggingComponent, setDraggingComponent] = useState(false);
+  const [dropTarget, setDropTarget] = useState(null);
   const [pop, setPop] = useState(null); // settings | publish | previewMenu | nameEdit
   const [preview, setPreview] = useState(null);
   const importRef = useRef(null);
@@ -911,6 +990,8 @@ export default function Editor() {
   const canvasRef = useRef(null);
   const drag = useRef(null);
   const justPanned = useRef(false);
+  const panGesture = useRef(false);
+  const justZoomed = useRef(false);
   const view = useRef({ zoom, pan });
   view.current = { zoom, pan };
   const s = zoom / 100;
@@ -938,17 +1019,30 @@ export default function Editor() {
     const onBg = !e.target.closest("[data-nopan]");
     if (!(e.button === 1 || (e.button === 0 && (onBg || space)))) return;
     e.preventDefault();
+    panGesture.current = true;
     drag.current = { sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y, moved: false };
     setPanning(true);
   };
+  const preventPanSelection = (e) => {
+    if (!space && !panGesture.current && !justPanned.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setPop(null);
+    setDimPop(null);
+    panGesture.current = false;
+    justPanned.current = false;
+  };
 
-  /* wheel: scroll = pan, ctrl/cmd+scroll (or pinch) = zoom at cursor */
+  /* wheel: scroll = pan, ctrl/cmd or space + scroll = zoom at cursor */
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
     const onWheel = (e) => {
       e.preventDefault();
-      if (e.ctrlKey || e.metaKey) {
+      const zooming = e.ctrlKey || e.metaKey || space;
+      if (zooming) {
+        justZoomed.current = true;
+        setTimeout(() => { justZoomed.current = false; }, 0);
         zoomAt(view.current.zoom * Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY);
       } else {
         const horiz = e.shiftKey && !e.deltaX;
@@ -957,7 +1051,7 @@ export default function Editor() {
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [space]);
 
   /* drag to pan */
   useEffect(() => {
@@ -1061,11 +1155,73 @@ export default function Editor() {
     if (selNode && selNode.type === "image") api.setProps({ src: a.src });
     else { const nn = Img(a.src, { height: "auto" }); nn.props.alt = a.name; addNode(nn); }
   };
+  const dropAsset = (e, targetId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const asset = assets.find((a) => a.id === e.dataTransfer.getData("text/x-asset"));
+    if (!asset) return;
+    const target = targetId ? findNode(page.children, targetId) : null;
+    if (target?.type === "image") {
+      patchId(target.id, (n) => ({ ...n, props: { ...n.props, src: asset.src, alt: asset.name } }));
+      setSelId(target.id);
+      return;
+    }
+    const parentId = target?.type === "container" ? target.id : targetId ? findParentId(page.children, targetId) : null;
+    const image = Img(asset.src, { height: "auto" });
+    image.props.alt = asset.name;
+    addNode(image, parentId ?? null);
+  };
+  const reorderSection = (sourceId, targetId, position) => update((p) => {
+    if (sourceId === targetId) return p;
+    const children = [...p.children];
+    const sourceIndex = children.findIndex((n) => n.id === sourceId);
+    if (sourceIndex < 0) return p;
+    const [moving] = children.splice(sourceIndex, 1);
+    const targetIndex = targetId ? children.findIndex((n) => n.id === targetId) : children.length;
+    if (targetIndex < 0) return p;
+    children.splice(targetIndex + (position === "after" && targetId ? 1 : 0), 0, moving);
+    return { ...p, children };
+  });
+  const dragOverNode = (e, targetId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const { top, height } = e.currentTarget.getBoundingClientRect();
+    setDropTarget({ id: targetId, position: e.clientY < top + height / 2 ? "before" : "after" });
+  };
+  const dropNode = (e, targetId) => {
+    const sourceId = e.dataTransfer.getData("text/x-node");
+    if (!sourceId) return false;
+    e.preventDefault();
+    e.stopPropagation();
+    const { top, height } = e.currentTarget.getBoundingClientRect();
+    const position = e.clientY < top + height / 2 ? "before" : "after";
+    reorderSection(sourceId, targetId, position);
+    setDropTarget(null);
+    return true;
+  };
   const drop = (e, parentId) => {
     e.preventDefault();
+    e.stopPropagation();
+    const sourceId = e.dataTransfer.getData("text/x-node");
+    if (sourceId) {
+      reorderSection(sourceId, null, "after");
+      setDropTarget(null);
+      return;
+    }
+    const sectionKey = e.dataTransfer.getData("text/x-section");
+    if (sectionKey) {
+      const [sectionId, rawIndex] = sectionKey.split(":");
+      const item = SECTIONS.find((section) => section.id === sectionId)?.items[Number(rawIndex)];
+      if (item) addSection(item.build());
+      setDraggingComponent(false);
+      return;
+    }
+    const assetId = e.dataTransfer.getData("text/x-asset");
+    if (assetId) { dropAsset(e, parentId); setDraggingComponent(false); return; }
     const key = e.dataTransfer.getData("text/x-comp");
     const def = COMPONENTS.find((c) => c.key === key);
     if (def) addNode(def.build(), parentId);
+    setDraggingComponent(false);
   };
 
   /* keyboard */
@@ -1100,7 +1256,10 @@ export default function Editor() {
     r.readAsText(file);
   };
 
-  const ctx = { preview: false, selectedId: selId, activeDevice, stateTab, select, drop };
+  const ctx = {
+    preview: false, selectedId: selId, activeDevice, stateTab, select, drop, dropAsset,
+    dropTarget, dragOverNode, dropNode, clearDropTarget: () => setDropTarget(null),
+  };
   const visible = Object.keys(DEVICES).filter((d) => show[d]);
 
   const railBtn = (id, icon, title) => (
@@ -1122,7 +1281,13 @@ export default function Editor() {
           cursor: panning ? "grabbing" : space ? "grab" : "default",
         }}
         onMouseDown={onCanvasDown}
-        onClick={() => { if (justPanned.current) { justPanned.current = false; return; } select(null); }}>
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes("text/x-comp") || e.dataTransfer.types.includes("text/x-asset") || e.dataTransfer.types.includes("text/x-section") || e.dataTransfer.types.includes("text/x-node")) e.preventDefault();
+        }}
+        onDrop={(e) => { drop(e, null); setDraggingComponent(false); }}
+        onClickCapture={preventPanSelection}
+        onAuxClickCapture={preventPanSelection}
+        onClick={() => { if (justPanned.current || justZoomed.current) { justPanned.current = false; justZoomed.current = false; return; } select(null); }}>
         <div className="absolute left-0 top-0 flex items-start"
           style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${s})`, transformOrigin: "0 0", gap: 16 / s, width: "max-content" }}>
           <style>{`.rp-frame *{box-sizing:border-box}.rp-frame :where(h1,h2,h3,h4,h5,h6,p,ul,hr){margin:0}.rp-frame button{font-family:inherit}`}</style>
@@ -1147,11 +1312,20 @@ export default function Editor() {
                   </div>
                 </div>
                 <Ctx.Provider value={ctx}>
-                  <div className="rp-frame bg-white shadow ring-1 ring-black/10" style={{ width: W, minHeight: 800, background: page.bg, fontFamily: page.font }}
+                  <div className="rp-frame bg-white shadow ring-1 ring-black/10" style={{ width: W, background: page.bg, fontFamily: page.font }}
                     onClick={() => select(null, d)}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => drop(e, null)}>
-                    {page.children.map((n) => <Render key={n.id} n={n} device={d} />)}
+                    {page.children.map((n) => <Render key={n.id} n={n} device={d} isPageSection />)}
+                    {draggingComponent && (
+                      <div
+                        className="m-3 flex min-h-16 items-center justify-center rounded-lg border-2 border-dashed border-blue-300 bg-blue-50/60 text-sm font-medium text-blue-600"
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => { e.stopPropagation(); drop(e, null); setDraggingComponent(false); }}
+                      >
+                        Drop to add at end
+                      </div>
+                    )}
                     {!page.children.length && <div className="flex h-[400px] items-center justify-center text-sm text-gray-400">Add a section from the left panel, or drop a component here.</div>}
                   </div>
                 </Ctx.Provider>
@@ -1201,11 +1375,11 @@ export default function Editor() {
               <span className="text-sm font-semibold capitalize">{leftTab}</span>
               <button onClick={() => setLeftOpen(false)} className="text-gray-400 hover:text-gray-700"><Ico n="left" size={16} /></button>
             </div>
-            {leftTab === "sections" && <SectionsPanel onAdd={addSection} />}
-            {leftTab === "components" && <ComponentsPanel onAdd={(nn) => addNode(nn)} />}
+            {leftTab === "sections" && <SectionsPanel onAdd={addSection} onDragStateChange={setDraggingComponent} />}
+            {leftTab === "components" && <ComponentsPanel onAdd={(nn) => addNode(nn)} onDragStateChange={setDraggingComponent} />}
             {leftTab === "layers" && (
               <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 210px)" }}>
-                <div className="mb-1 flex items-center gap-1 px-1 text-xs font-medium text-gray-700">📄 Page</div>
+                <div className="mb-1 flex items-center gap-1 px-1 text-xs font-medium text-gray-700"><Ico n="page" size={14} />Page</div>
                 {page.children.map((n) => <LayerItem key={n.id} n={n} depth={1} api={api} selectedId={selId} />)}
                 {!page.children.length && <p className="p-2 text-xs text-gray-500">Nothing here yet.</p>}
               </div>
