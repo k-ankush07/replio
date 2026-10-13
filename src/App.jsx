@@ -374,7 +374,13 @@ function Render({ n, device, isPageSection = false }) {
   const empty = n.type === "container" && n.children.length === 0;
 
   if (st.minWidth == null) st.minWidth = "0";
-  if (c.preview) st.transition = "background-color .15s ease, color .15s ease, opacity .15s ease, box-shadow .15s ease, border-color .15s ease, filter .15s ease";
+  if (c.preview) {
+    st.transition = "background-color .15s ease, color .15s ease, opacity .15s ease, box-shadow .15s ease, border-color .15s ease, filter .15s ease";
+    if (st.cursor == null) {
+      const hasAction = p.action && ["link", "scroll"].includes(p.action.type) && safeUrl(p.action.value);
+      st.cursor = n.type === "button" || hasAction ? "pointer" : "default";
+    }
+  }
   if (n.type === "text" && !st.whiteSpace) st.whiteSpace = "pre-wrap";
   if (n.type === "image" && st.maxWidth == null) st.maxWidth = "100%"; // images never overflow their container on small screens
   if (!c.preview) {
