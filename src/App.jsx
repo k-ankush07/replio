@@ -15,7 +15,6 @@ const cap = (s) => s[0].toUpperCase() + s.slice(1);
 const esc = (s) =>
   String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-/* block javascript:/data:/vbscript: URLs from link actions */
 const safeUrl = (u) => {
   const v = String(u || "").trim();
   if (!v || /^(javascript|data|vbscript):/i.test(v)) return "";
