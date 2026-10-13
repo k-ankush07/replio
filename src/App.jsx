@@ -1124,13 +1124,14 @@ export default function Editor() {
   const [dropTarget, setDropTarget] = useState(null);
   const [pop, setPop] = useState(null); // settings | publish | previewMenu | nameEdit
   const [preview, setPreview] = useState(null);
+  const [saveStatus, setSaveStatus] = useState("saved");
   const [toast, setToast] = useState(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const toastTimer = useRef(null);
   const importRef = useRef(null);
 
   const notify = (msg) => {
-    setToast(msg);
+    setToast({ id: Date.now(), message: msg });
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2500);
   };
@@ -1265,10 +1266,30 @@ export default function Editor() {
   const undo = () => setHist((h) => (h.past.length ? { past: h.past.slice(0, -1), present: h.past[h.past.length - 1], future: [h.present, ...h.future] } : h));
   const redo = () => setHist((h) => (h.future.length ? { past: [...h.past, h.present], present: h.future[0], future: h.future.slice(1) } : h));
 
-  /* debounced autosave (localStorage may be unavailable, e.g. in sandboxed previews) */
+  const savePage = (pageToSave = page, showFeedback = false) => {
+    try {
+      localStorage.setItem(STORE, JSON.stringify(pageToSave));
+      setSaveStatus("saved");
+      if (showFeedback) notify("Changes saved automatically ✌️");
+      return true;
+    } catch (error) {
+      console.error("Unable to save page to local storage", error);
+      setSaveStatus("error");
+      notify("Could not save changes. Check browser storage settings.");
+      return false;
+    }
+  };
+
+  /* Debounced autosave, with a synchronous flush when the page is closed. */
   useEffect(() => {
-    const t = setTimeout(() => { try { localStorage.setItem(STORE, JSON.stringify(page)); } catch (e) { /* ignore */ } }, 400);
-    return () => clearTimeout(t);
+    setSaveStatus("saving");
+    const t = setTimeout(() => savePage(page), 400);
+    const flush = () => savePage(page);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("pagehide", flush);
+    };
   }, [page]);
 
   /* selection */
@@ -1413,6 +1434,12 @@ export default function Editor() {
   useEffect(() => {
     const h = (e) => {
       const t = e.target;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        savePage(page, true);
+        return;
+      }
       if (/INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable) return;
       if (e.key === "Escape") {
         if (preview) setPreview(null); else setSelId(null);
@@ -1421,7 +1448,6 @@ export default function Editor() {
         return;
       }
       if (preview) return; // no editing shortcuts while previewing
-      const mod = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
       if (mod && k === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); }
       else if (mod && k === "y") { e.preventDefault(); redo(); }
@@ -1559,6 +1585,9 @@ export default function Editor() {
         ) : (
           <button onClick={() => setPop("nameEdit")} className="min-w-0 flex-1 truncate text-left text-sm font-semibold">{page.name}</button>
         )}
+        <span title={saveStatus === "saving" ? "Saving changes…" : saveStatus === "error" ? "Could not save changes" : "All changes saved"} className={`shrink-0 text-[10px] ${saveStatus === "error" ? "text-red-500" : saveStatus === "saving" ? "text-gray-400" : "text-green-600"}`}>
+          {saveStatus === "saving" ? "Saving…" : saveStatus === "error" ? "Save failed" : "Saved"}
+        </span>
         <button title="Page settings" onClick={() => setPop(pop === "settings" ? null : "settings")} className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-700"><Ico n="gear" size={16} /></button>
         {pop === "settings" && (
           <div className="absolute left-0 top-[60px] w-[300px] space-y-3 rounded-xl bg-white p-4 shadow-lg ring-1 ring-black/5">
@@ -1690,7 +1719,7 @@ export default function Editor() {
 
       {/* toast */}
       {toast && (
-        <div className="pointer-events-none fixed left-1/2 -translate-x-1/2 rounded-lg bg-gray-900 px-4 py-2 text-xs font-medium text-white shadow-lg" style={{ bottom: 76, zIndex: 60 }}>{toast}</div>
+        <div key={toast.id} className="pointer-events-none fixed left-1/2 -translate-x-1/2 rounded-lg bg-gray-900 px-4 py-2 text-xs font-medium text-white shadow-lg" style={{ bottom: 76, zIndex: 60 }}>{toast.message}</div>
       )}
     </div>
   );
