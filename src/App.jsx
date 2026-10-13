@@ -1590,7 +1590,8 @@ export default function Editor() {
         </span>
         <button title="Page settings" onClick={() => setPop(pop === "settings" ? null : "settings")} className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-700"><Ico n="gear" size={16} /></button>
         {pop === "settings" && (
-          <div className="absolute left-0 top-[60px] w-[300px] space-y-3 rounded-xl bg-white p-4 shadow-lg ring-1 ring-black/5">
+          <div className="absolute top-0 z-40 space-y-3 rounded-xl bg-white p-4 shadow-lg ring-1 ring-black/5"
+            style={{ left: "min(calc(100% + 8px), calc(100vw - 312px))", width: "min(300px, calc(100vw - 24px))" }}>
             <span className="text-[13px] font-semibold">Page settings</span>
             <Field label="Title"><Inp value={page.title} onChange={(v) => update((p) => ({ ...p, title: v }), "title")} /></Field>
             <Field label="Background"><Color value={page.s.base.background} onChange={(v) => setPageBase("background", v)} /></Field>
