@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useContext, createContext } from "react";
 import {
-  ArrowDown, ArrowRight, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Circle,
+  ArrowDown, ArrowRight, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Circle,
   Columns2, Copy, Eye, FileText, Grid2X2, Heading1, Heading2, Heading3,
   Image, Layers3, List, Minus, Monitor, MousePointer2, PanelsTopLeft, Play,
   Plus, Redo2, Search, Settings, Square, Star, Trash2, Type, Undo2, Upload,
@@ -11,8 +11,16 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const kebab = (s) => s.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase());
 const camel = (s) => s.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
 const esc = (s) =>
   String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/* block javascript:/data:/vbscript: URLs from link actions */
+const safeUrl = (u) => {
+  const v = String(u || "").trim();
+  if (!v || /^(javascript|data|vbscript):/i.test(v)) return "";
+  return v;
+};
 
 const DEVICES = {
   desktop: { label: "Desktop", key: "base" },
@@ -27,43 +35,14 @@ const DEVICE_PRESETS = {
 
 /* ------------------------------ icons ------------------------------ */
 const ICONS = {
-  sections: PanelsTopLeft,
-  plus: Plus,
-  layers: Layers3,
-  image: Image,
-  play: Play,
-  undo: Undo2,
-  redo: Redo2,
-  gear: Settings,
-  devices: Monitor,
-  left: ChevronLeft,
-  trash: Trash2,
-  copy: Copy,
-  up: ArrowUp,
-  down: ChevronDown,
-  right: ChevronRight,
-  check: Check,
-  arrowDown: ArrowDown,
-  arrowRight: ArrowRight,
-  wrap: WrapText,
-  eye: Eye,
-  upload: Upload,
-  search: Search,
-  close: X,
-  text: Type,
-  heading1: Heading1,
-  heading2: Heading2,
-  heading3: Heading3,
-  list: List,
-  rating: Star,
-  container: Square,
-  button: MousePointer2,
-  grid: Grid2X2,
-  divider: Minus,
-  icon: Circle,
-  column: Columns2,
-  page: FileText,
-  heading: Heading1,
+  sections: PanelsTopLeft, plus: Plus, layers: Layers3, image: Image, play: Play,
+  undo: Undo2, redo: Redo2, gear: Settings, devices: Monitor, left: ChevronLeft,
+  trash: Trash2, copy: Copy, up: ChevronUp, down: ChevronDown, right: ChevronRight,
+  check: Check, arrowDown: ArrowDown, arrowRight: ArrowRight, wrap: WrapText, eye: Eye,
+  upload: Upload, search: Search, close: X, text: Type, heading1: Heading1,
+  heading2: Heading2, heading3: Heading3, list: List, rating: Star, container: Square,
+  button: MousePointer2, grid: Grid2X2, divider: Minus, icon: Circle, circle: Circle,
+  column: Columns2, page: FileText, heading: Heading1,
 };
 const Ico = ({ n, size = 18, ...props }) => {
   const Icon = ICONS[n];
@@ -72,10 +51,7 @@ const Ico = ({ n, size = 18, ...props }) => {
 
 /* ------------------------- node factories -------------------------- */
 const node = (type, name, props = {}, base = {}, children = [], mob = {}, tab = {}) => ({
-  id: uid(),
-  type, 
-  name,
-  props,
+  id: uid(), type, name, props,
   s: { base, tablet: tab, mobile: mob, hover: {} },
   hide: {},
   children,
@@ -250,16 +226,63 @@ const shift = (list, id, dir) => {
     [c[i], c[j]] = [c[j], c[i]];
     return c;
   }
-  return list.map((n) => ({ ...n, children: shift(n.children, id, dir) }));
+  let changed = false;
+  const out = list.map((n) => {
+    const ch = shift(n.children, id, dir);
+    if (ch === n.children) return n;
+    changed = true;
+    return { ...n, children: ch };
+  });
+  return changed ? out : list;
 };
 
+/* make imported / stored data safe to render */
+const fixNode = (n) => ({
+  ...n,
+  id: n.id || uid(),
+  type: n.type || "container",
+  name: n.name || n.type || "Layer",
+  props: n.props || {},
+  s: { base: {}, tablet: {}, mobile: {}, hover: {}, ...(n.s || {}) },
+  hide: n.hide || {},
+  children: (Array.isArray(n.children) ? n.children : []).map(fixNode),
+});
+const PAGE_ID = "__page__";
+/* the page itself behaves like a container node: it has its own styles per device */
+const pageNodeOf = (p) => ({ id: PAGE_ID, type: "container", name: "Page", props: { tag: "div" }, s: p.s, hide: {}, children: p.children });
+const fixPage = (p) => {
+  const s = { base: {}, tablet: {}, mobile: {}, hover: {}, ...(p.s || {}) };
+  if (!p.s) s.base = { background: p.bg || "#ffffff", fontFamily: p.font || "Inter, system-ui, sans-serif" }; // migrate old pages
+  return { name: "My page", title: "My page", ...p, s, children: (Array.isArray(p.children) ? p.children : []).map(fixNode) };
+};
+
+/* later layers win; a shorthand in a later layer cancels earlier longhands */
+const SIDES = ["Top", "Right", "Bottom", "Left"];
+const applyLayer = (r, l) => {
+  for (const [k, v] of Object.entries(l)) {
+    if (k === "padding" || k === "margin") SIDES.forEach((sd) => delete r[k + sd]);
+    if (k === "gap") { delete r.columnGap; delete r.rowGap; }
+    delete r[k];
+    r[k] = v;
+  }
+  return r;
+};
 const resolveStyle = (n, device, hover) => {
   const s = n.s;
-  let r = { ...s.base };
-  if (device === "tablet" || device === "mobile") r = { ...r, ...s.tablet };
-  if (device === "mobile") r = { ...r, ...s.mobile };
-  if (hover) r = { ...r, ...s.hover };
+  const r = applyLayer({}, s.base);
+  if (device === "tablet" || device === "mobile") applyLayer(r, s.tablet);
+  if (device === "mobile") applyLayer(r, s.mobile);
+  if (hover) applyLayer(r, s.hover);
   return r;
+};
+const boxSide = (style, property, side) => {
+  const direct = style[`${property}${cap(side)}`];
+  if (direct != null) return direct;
+  const shorthand = style[property];
+  if (!shorthand) return "0px";
+  const values = String(shorthand).match(/(?:[^()\s]+|\([^)]*\))+/g) || [];
+  const [top, right = top, bottom = top, left = right] = values;
+  return { top, right, bottom, left }[side] || "0px";
 };
 
 /* ------------------------------ export ----------------------------- */
@@ -267,11 +290,17 @@ const RESET = "*{box-sizing:border-box}h1,h2,h3,h4,h5,h6,p,ul,hr,figure{margin:0
 const cssText = (o) => Object.entries(o).map(([k, v]) => `${kebab(k)}:${v}`).join(";");
 
 function exportHTML(page) {
-  let base = "", tab = "", mob = "", hov = "", hide = "";
+  let base = "", tab = "", mob = "", hov = "", hide = "", usesTw = false;
   const el = (n) => {
     const cls = "n-" + n.id;
     const p = n.props;
-    base += `.${cls}{${cssText(n.s.base)}}`;
+    if (p.className) usesTw = true;
+    const pre =
+      (n.s.base.minWidth == null ? "min-width:0;" : "") +
+      (n.type === "text" && !n.s.base.whiteSpace ? "white-space:pre-wrap;" : "") +
+      (n.type === "image" && n.s.base.maxWidth == null ? "max-width:100%;" : "") +
+      (Object.keys(n.s.hover).length && !n.s.base.transition ? "transition:all .15s ease;" : "");
+    base += `.${cls}{${pre}${cssText(n.s.base)}}`;
     if (Object.keys(n.s.tablet).length) tab += `.${cls}{${cssText(n.s.tablet)}}`;
     if (Object.keys(n.s.mobile).length) mob += `.${cls}{${cssText(n.s.mobile)}}`;
     if (Object.keys(n.s.hover).length) hov += `.${cls}:hover{${cssText(n.s.hover)}}`;
@@ -284,13 +313,14 @@ function exportHTML(page) {
     if (p.role) a += ` role="${esc(p.role)}"`;
     if (p.title) a += ` title="${esc(p.title)}"`;
     const act = p.action;
-    if (act && act.type === "link" && act.value) a += ` onclick="${esc(`window.open(${JSON.stringify(act.value)},${act.newTab ? '"_blank"' : '"_self"'})`)}" style="cursor:pointer"`;
-    if (act && act.type === "scroll" && act.value) a += ` onclick="${esc(`document.getElementById(${JSON.stringify(act.value)})?.scrollIntoView({behavior:'smooth'})`)}" style="cursor:pointer"`;
+    const val = act ? safeUrl(act.value) : "";
+    if (act && act.type === "link" && val) a += ` onclick="${esc(`window.open(${JSON.stringify(val)},${act.newTab ? '"_blank"' : '"_self"'})`)}" style="cursor:pointer"`;
+    if (act && act.type === "scroll" && val) a += ` onclick="${esc(`document.getElementById(${JSON.stringify(val)})?.scrollIntoView({behavior:'smooth'})`)}" style="cursor:pointer"`;
     switch (n.type) {
       case "image": return `<img${a} src="${esc(p.src)}" alt="${esc(p.alt)}">`;
       case "hr": return `<hr${a}>`;
       case "list": return `<ul${a}>${(p.items || []).map((t) => `<li>${esc(t)}</li>`).join("")}</ul>`;
-      case "stars": { const r = Math.max(0, Math.min(5, +p.rating || 0)); return `<div${a}>${"★".repeat(r)}${"☆".repeat(5 - r)}</div>`; }
+      case "stars": { const r = Math.round(Math.max(0, Math.min(5, +p.rating || 0))); return `<div${a}>${"★".repeat(r)}${"☆".repeat(5 - r)}</div>`; }
       case "text": return `<p${a}>${esc(p.text)}</p>`;
       case "heading": return `<${p.tag || "h2"}${a}>${esc(p.text)}</${p.tag || "h2"}>`;
       case "button": return `<button${a}>${esc(p.text)}</button>`;
@@ -299,16 +329,20 @@ function exportHTML(page) {
     }
   };
   const body = page.children.map(el).join("\n");
+  const ps = page.s || { base: {}, tablet: {}, mobile: {}, hover: {} };
+  base = `.n-page{${cssText(ps.base)}}` + base;
+  if (Object.keys(ps.tablet).length) tab = `.n-page{${cssText(ps.tablet)}}` + tab;
+  if (Object.keys(ps.mobile).length) mob = `.n-page{${cssText(ps.mobile)}}` + mob;
+  if (Object.keys(ps.hover).length) hov = `.n-page:hover{${cssText(ps.hover)}}` + hov;
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(page.title || page.name)}</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<style>
+${usesTw ? '<script src="https://cdn.tailwindcss.com"></script>\n' : ""}<style>
 ${RESET}
-body{margin:0;background:${page.bg};font-family:${page.font}}
+body{margin:0;background:${ps.base.background || "#ffffff"};font-family:${ps.base.fontFamily || "system-ui,sans-serif"}}
 ${base}
 @media(max-width:1024px){${tab}}
 @media(max-width:480px){${mob}}
@@ -317,7 +351,9 @@ ${hide}
 </style>
 </head>
 <body>
+<div class="n-page">
 ${body}
+</div>
 </body>
 </html>`;
 }
@@ -340,6 +376,7 @@ function Render({ n, device, isPageSection = false }) {
   if (st.minWidth == null) st.minWidth = "0";
   if (c.preview) st.transition = "all .15s ease";
   if (n.type === "text" && !st.whiteSpace) st.whiteSpace = "pre-wrap";
+  if (n.type === "image" && st.maxWidth == null) st.maxWidth = "100%"; // images never overflow their container on small screens
   if (!c.preview) {
     if (isSel) { st.outline = "2px solid #2563eb"; st.outlineOffset = "-2px"; }
     else if (isPageSection && c.dropTarget?.id === n.id) {
@@ -353,10 +390,11 @@ function Render({ n, device, isPageSection = false }) {
   const onClick = (e) => {
     if (!c.preview) { e.stopPropagation(); c.select(n.id, device); return; }
     const a = p.action;
-    if (!a || a.type === "none" || !a.value) return;
+    const val = a ? safeUrl(a.value) : "";
+    if (!a || a.type === "none" || !val) return;
     e.stopPropagation();
-    if (a.type === "link") window.open(a.value, a.newTab ? "_blank" : "_self");
-    if (a.type === "scroll") document.getElementById(a.value)?.scrollIntoView({ behavior: "smooth" });
+    if (a.type === "link") window.open(val, a.newTab ? "_blank" : "_self");
+    if (a.type === "scroll") document.getElementById(val)?.scrollIntoView({ behavior: "smooth" });
   };
 
   const common = {
@@ -375,19 +413,21 @@ function Render({ n, device, isPageSection = false }) {
     } : undefined,
     onDragEnd: isPageSection && !c.preview ? c.clearDropTarget : undefined,
     onDragOver: (e) => {
-      if (!c.preview && isPageSection && e.dataTransfer.types.includes("text/x-node")) {
+      if (c.preview) return;
+      if (isPageSection && e.dataTransfer.types.includes("text/x-node")) {
         c.dragOverNode(e, n.id);
         return;
       }
-      if (!c.preview && e.dataTransfer.types.includes("text/x-asset")) e.preventDefault();
+      if (e.dataTransfer.types.includes("text/x-asset")) e.preventDefault();
     },
     onDrop: (e) => {
-      if (!c.preview && isPageSection && e.dataTransfer.types.includes("text/x-node")) {
+      if (c.preview) return;
+      if (isPageSection && e.dataTransfer.types.includes("text/x-node")) {
         e.stopPropagation();
         c.dropNode(e, n.id);
         return;
       }
-      if (!c.preview && e.dataTransfer.types.includes("text/x-asset")) c.dropAsset(e, n.id);
+      if (e.dataTransfer.types.includes("text/x-asset")) c.dropAsset(e, n.id);
     },
     onMouseEnter: () => setHov(true),
     onMouseLeave: () => setHov(false),
@@ -398,7 +438,7 @@ function Render({ n, device, isPageSection = false }) {
     case "hr": return <hr {...common} />;
     case "list": return <ul {...common}>{(p.items || []).map((t, i) => <li key={i}>{t}</li>)}</ul>;
     case "stars": {
-      const r = Math.max(0, Math.min(5, +p.rating || 0));
+      const r = Math.round(Math.max(0, Math.min(5, +p.rating || 0)));
       return <div {...common}>{"★".repeat(r) + "☆".repeat(5 - r)}</div>;
     }
     case "text": return <p {...common}>{p.text}</p>;
@@ -495,17 +535,33 @@ const IconBtn = ({ n, title, onClick, active, danger }) => (
   </button>
 );
 
+/* split on ';' that are not inside (), "" or '' (e.g. data: URLs) */
+const splitDecls = (text) => {
+  const out = [];
+  let cur = "", depth = 0, q = null;
+  for (const ch of text) {
+    if (q) { if (ch === q) q = null; cur += ch; continue; }
+    if (ch === '"' || ch === "'") { q = ch; cur += ch; continue; }
+    if (ch === "(") depth++;
+    if (ch === ")") depth = Math.max(0, depth - 1);
+    if (ch === ";" && depth === 0) { out.push(cur); cur = ""; continue; }
+    cur += ch;
+  }
+  if (cur.trim()) out.push(cur);
+  return out;
+};
+
 function CustomCss({ value, onApply }) {
   const text = Object.entries(value).map(([k, v]) => `${kebab(k)}: ${v};`).join("\n");
   const [d, setD] = useState(text);
   useEffect(() => setD(text), [text]);
   const apply = () => {
     const o = {};
-    d.split(";").forEach((line) => {
+    splitDecls(d).forEach((line) => {
       const i = line.indexOf(":");
       if (i < 0) return;
       const k = line.slice(0, i).trim(), v = line.slice(i + 1).trim();
-      if (k && v) o[camel(k)] = v;
+      if (k && v) o[k.startsWith("--") ? k : camel(k)] = v;
     });
     onApply(o);
   };
@@ -606,6 +662,7 @@ function ComponentsPanel({ onAdd, onDragStateChange }) {
             <span className="text-[11px]">{c.label}</span>
           </button>
         ))}
+        {!list.length && <p className="col-span-2 p-2 text-xs text-gray-500">No components found.</p>}
       </div>
     </>
   );
@@ -619,6 +676,12 @@ function AssetsPanel({ assets, setAssets, onUse }) {
     r.onload = () => setAssets((a) => [{ id: uid(), name: f.name, src: r.result }, ...a]);
     r.readAsDataURL(f);
   });
+  const addUrl = () => {
+    const u = url.trim();
+    if (!u || /^(javascript|vbscript):/i.test(u)) return;
+    setAssets((a) => [{ id: uid(), name: u.split("/").pop() || "image", src: u }, ...a]);
+    setUrl("");
+  };
   const list = assets.filter((a) => a.name.toLowerCase().includes(q.toLowerCase()));
   return (
     <>
@@ -629,14 +692,14 @@ function AssetsPanel({ assets, setAssets, onUse }) {
       </div>
       <div className="mt-2 flex gap-1">
         <Inp value={url} onChange={setUrl} placeholder="Paste image URL" />
-        <button onClick={() => { if (url) { setAssets((a) => [{ id: uid(), name: url.split("/").pop() || "image", src: url }, ...a]); setUrl(""); } }} className="rounded-md bg-gray-900 px-2 text-xs text-white">Add</button>
+        <button onClick={addUrl} className="rounded-md bg-gray-900 px-2 text-xs text-white">Add</button>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2 overflow-y-auto pr-1" style={{ maxHeight: "calc(100vh - 280px)" }}>
         {list.map((a) => (
           <button key={a.id} draggable
             onDragStart={(e) => { e.dataTransfer.setData("text/x-asset", a.id); e.dataTransfer.effectAllowed = "copy"; }}
             onClick={() => onUse(a)} className="overflow-hidden rounded-lg border border-gray-200 text-left hover:border-blue-400">
-            <img src={a.src} alt="" className="h-24 w-full object-cover" />
+            <img src={a.src} alt="" draggable={false} className="h-24 w-full object-cover" />
             <span className="block truncate px-1.5 py-1 text-[11px] text-gray-600">{a.name}</span>
           </button>
         ))}
@@ -649,6 +712,33 @@ function AssetsPanel({ assets, setAssets, onUse }) {
 /* --------------------------- right panel --------------------------- */
 const V3 = ["flex-start", "center", "flex-end"];
 
+/* column layout presets: [template, visual fractions] */
+const GRID_PRESETS = [
+  ["repeat(1, 1fr)", [1]],
+  ["repeat(2, 1fr)", [1, 1]],
+  ["1fr 2fr", [1, 2]],
+  ["2fr 1fr", [2, 1]],
+  ["repeat(3, 1fr)", [1, 1, 1]],
+  ["repeat(4, 1fr)", [1, 1, 1, 1]],
+];
+const normTpl = (t) => String(t || "").replace(/\s+/g, " ").trim();
+const trackCount = (t) => {
+  const v = normTpl(t);
+  const m = /^repeat\((\d+)/.exec(v);
+  if (m) return +m[1];
+  if (!v) return 1;
+  return (v.match(/(?:[^()\s]+|\([^)]*\))+/g) || []).length || 1;
+};
+/* gap shorthand is "row col" */
+const gapOf = (st, which) => {
+  const direct = which === "col" ? st.columnGap : st.rowGap;
+  if (direct != null) return direct;
+  if (!st.gap) return "";
+  const [row, col = row] = String(st.gap).match(/(?:[^()\s]+|\([^)]*\))+/g) || [];
+  return which === "col" ? col : row;
+};
+const SIDE_KEYS = ["top", "right", "bottom", "left"];
+
 function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
   const [tab, setTab] = useState("design");
   const fileRef = useRef(null);
@@ -656,7 +746,8 @@ function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
   const cur = resolveStyle(n, device, stateTab === "hover");
   const set = (k, v) => api.setStyles({ [k]: v }, editKey);
   const isC = n.type === "container";
-  const isTxt = ["text", "heading", "button", "list", "icon", "stars"].includes(n.type);
+  const isPage = n.id === PAGE_ID;
+  const isTxt = ["text", "heading", "button", "list", "icon", "stars", "circle"].includes(n.type);
   const p = n.props;
 
   const wMode = cur.width === "100%" ? "fill" : !cur.width || cur.width === "fit-content" ? "fit" : "fixed";
@@ -665,12 +756,40 @@ function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
   const axis = fd.startsWith("column") ? "column" : "row";
   const reversed = fd.endsWith("-reverse");
   const isGrid = cur.display === "grid";
+  const sidesOf = (prop) => Object.fromEntries(SIDE_KEYS.map((sd) => [sd, boxSide(cur, prop, sd)]));
+  const margin = sidesOf("margin");
+  const padding = sidesOf("padding");
   const colCount = (/repeat\((\d+)/.exec(cur.gridTemplateColumns || "") || [])[1] || "";
   const posKind = cur.position || "static";
 
+  /* write all four longhands and drop the shorthand so nothing conflicts */
+  const setBox = (prop, side, v) => {
+    const vals = prop === "margin" ? margin : padding;
+    const o = { [prop]: "" };
+    SIDE_KEYS.forEach((sd) => { o[prop + cap(sd)] = sd === side ? v : vals[sd]; });
+    api.setStyles(o, editKey);
+  };
+
+  /* horizontal alignment of the element itself, via auto margins (works in block and flex parents) */
+  const alignNow = margin.left === "auto" && margin.right === "auto" ? "center" : margin.left === "auto" ? "right" : "left";
+  const setAlign = (v) => {
+    const o = {
+      margin: "",
+      marginTop: margin.top, marginBottom: margin.bottom,
+      marginLeft: v === "left" ? "" : "auto",
+      marginRight: v === "right" ? "" : "auto",
+    };
+    if (["image", "button", "icon"].includes(n.type)) o.display = "block"; // inline elements ignore auto margins
+    if (["icon", "stars"].includes(n.type) && !cur.width) o.width = "fit-content";
+    api.setStyles(o, editKey);
+  };
+
+  const layoutOn = !isPage || cur.display === "flex" || isGrid;
   const setAxis = (v) => {
     if (v === "wrap") { set("flexWrap", cur.flexWrap === "wrap" ? "nowrap" : "wrap"); return; }
-    set("flexDirection", v + (reversed ? "-reverse" : ""));
+    const o = { flexDirection: v + (reversed ? "-reverse" : "") };
+    if (cur.flexWrap === "wrap") o.flexWrap = "nowrap";
+    api.setStyles(o, editKey);
   };
 
   return (
@@ -681,7 +800,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
           <button onClick={() => api.select(null)} className="text-gray-400 hover:text-gray-700"><Ico n="close" size={15} /></button>
         </div>
         <div className="mt-2 flex gap-4 border-b border-gray-100 text-xs">
-          {[["design", "Design"], ["config", "Config"], ["interactions", "Interactions"], ["a11y", "Accessibility"]].map(([k, l]) => (
+          {[["design", "Design"], ["config", "Config"], ["interactions", "Interactions"], ["a11y", "Accessibility"]].filter(([k]) => !isPage || k === "design").map(([k, l]) => (
             <button key={k} onClick={() => setTab(k)} className={`pb-2 ${tab === k ? "border-b-2 border-blue-600 font-medium text-blue-600" : "text-gray-500"}`}>{l}</button>
           ))}
         </div>
@@ -693,7 +812,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
             <Section title="States">
               <div className="flex gap-2">
                 <button onClick={() => setStateTab("default")} className={`rounded-md border px-3 py-1 text-xs ${stateTab === "default" ? "border-blue-500 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-600"}`}>Default</button>
-                <button onClick={() => setStateTab("hover")} className={`rounded-md border px-3 py-1 text-xs ${stateTab === "hover" ? "border-blue-500 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-600"}`}>Hover</button>
+                {!isPage && <button onClick={() => setStateTab("hover")} className={`rounded-md border px-3 py-1 text-xs ${stateTab === "hover" ? "border-blue-500 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-600"}`}>Hover</button>}
               </div>
               <p className="text-[11px] text-gray-500">
                 Editing: <b>{stateTab === "hover" ? "hover style" : DEVICES[device].label}</b>
@@ -705,6 +824,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
             </Section>
 
             <Section title="Size">
+              {!isPage && (<>
               <Field label="Width">
                 <div className="flex gap-1">
                   <div className="w-[96px]"><Seg value={wMode} options={[{ value: "fill", label: "Fill" }, { value: "fit", label: "Fit" }, { value: "fixed", label: "Px" }]}
@@ -719,25 +839,48 @@ function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
                   <Inp value={cur.height} onChange={(v) => set("height", v)} placeholder="auto" />
                 </div>
               </Field>
+              </>)}
               <Field label="Max width"><Inp value={cur.maxWidth} onChange={(v) => set("maxWidth", v)} placeholder="none" /></Field>
               <Field label="Min height"><Inp value={cur.minHeight} onChange={(v) => set("minHeight", v)} placeholder="0" /></Field>
+              {!isPage && (<>
               <Field label="Flex"><Inp value={cur.flex} onChange={(v) => set("flex", v)} placeholder="e.g. 1" /></Field>
               <Field label="Ratio"><Inp value={cur.aspectRatio} onChange={(v) => set("aspectRatio", v)} placeholder="e.g. 16 / 9" /></Field>
+              <Field label="Align">
+                <Seg value={alignNow} options={[{ value: "left", label: "Left" }, { value: "center", label: "Center" }, { value: "right", label: "Right" }]} onChange={setAlign} />
+              </Field>
+              </>)}
             </Section>
 
             {isC && (
               <Section title="Layout">
-                <Seg value={isGrid ? "columns" : "auto"} options={[{ value: "auto", label: "Auto Layout" }, { value: "columns", label: "Columns" }]}
+                <Seg value={isGrid ? "columns" : layoutOn ? "auto" : ""} options={[{ value: "auto", label: "Auto Layout" }, { value: "columns", label: "Columns" }]}
                   onChange={(m) => m === "columns"
                     ? api.setStyles({ display: "grid", gridTemplateColumns: "repeat(2, 1fr)" }, editKey)
-                    : api.setStyles({ display: "flex", gridTemplateColumns: "" }, editKey)} />
+                    : api.setStyles({ display: "flex", gridTemplateColumns: "", flexDirection: cur.flexDirection || "column" }, editKey)} />
                 {isGrid ? (
                   <>
-                    <Field label="Columns"><Inp value={colCount} onChange={(v) => set("gridTemplateColumns", +v > 0 ? `repeat(${+v}, 1fr)` : "")} placeholder="2" /></Field>
-                    <Field label="Gap"><Inp value={cur.gap} onChange={(v) => set("gap", v)} placeholder="0px" /></Field>
+                    <div className="grid grid-cols-2 gap-2">
+                      {GRID_PRESETS.map(([tpl, fr]) => {
+                        const on = normTpl(cur.gridTemplateColumns) === tpl;
+                        return (
+                          <button key={tpl} title={fr.join(" : ")} onClick={() => set("gridTemplateColumns", tpl)}
+                            className={`flex h-9 gap-1 rounded-md border p-1 ${on ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-gray-50 hover:border-gray-300"}`}>
+                            {fr.map((f, i) => (
+                              <span key={i} style={{ flex: f }} className={`flex items-center justify-center rounded-sm text-[11px] ${on ? "bg-white text-blue-600" : "bg-white text-gray-500"}`}>{f}</span>
+                            ))}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <Field label="Columns">
+                      <Sel value={String(trackCount(cur.gridTemplateColumns))} options={Array.from({ length: 12 }, (_, i) => String(i + 1))}
+                        onChange={(v) => set("gridTemplateColumns", `repeat(${v}, 1fr)`)} />
+                    </Field>
+                    <Field label="Col Gap"><Inp value={gapOf(cur, "col")} onChange={(v) => api.setStyles({ gap: "", columnGap: v, rowGap: gapOf(cur, "row") }, editKey)} placeholder="0px" /></Field>
+                    <Field label="Row Gap"><Inp value={gapOf(cur, "row")} onChange={(v) => api.setStyles({ gap: "", rowGap: v, columnGap: gapOf(cur, "col") }, editKey)} placeholder="0px" /></Field>
                     <Field label="Align"><Sel value={cur.alignItems || ""} options={["", "stretch", "flex-start", "center", "flex-end"]} onChange={(v) => set("alignItems", v)} /></Field>
                   </>
-                ) : (
+                ) : layoutOn ? (
                   <>
                     <Seg value={cur.flexWrap === "wrap" ? "wrap" : axis} options={[{ value: "row", label: <span className="flex items-center justify-center gap-1"><Ico n="arrowRight" size={13} />Row</span> }, { value: "column", label: <span className="flex items-center justify-center gap-1"><Ico n="arrowDown" size={13} />Col</span> }, { value: "wrap", label: <span className="flex items-center justify-center gap-1"><Ico n="wrap" size={13} />Wrap</span> }]} onChange={setAxis} />
                     <div className="flex items-start justify-between gap-3">
@@ -760,11 +903,11 @@ function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
                       </div>
                     </div>
                   </>
-                )}
+                ) : <p className="text-[11px] text-gray-500">The page uses normal stacked layout. Choose Auto Layout to control direction, gap and alignment of your sections, or Columns for a grid.</p>}
               </Section>
             )}
 
-            <Section title="Visibility">
+            {!isPage && (<Section title="Visibility">
               <div className="flex gap-2">
                 {["mobile", "tablet", "desktop"].map((d) => (
                   <button key={d} onClick={() => api.toggleHide(n.id, d)} className={`flex-1 rounded-md border px-2 py-1 text-xs capitalize ${n.hide[d] ? "border-red-300 bg-red-50 text-red-600" : "border-gray-200 text-gray-600"}`}>
@@ -772,29 +915,29 @@ function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
                   </button>
                 ))}
               </div>
-            </Section>
+            </Section>)}
 
             <Section title="Spacing">
               <div className="rounded-lg bg-orange-50 p-2 text-[10px] text-orange-500">
                 <div className="mb-0.5">Margin</div>
-                <div className="flex justify-center"><Mini value={cur.marginTop} onChange={(v) => set("marginTop", v)} /></div>
+                <div className="flex justify-center"><Mini value={margin.top} onChange={(v) => setBox("margin", "top", v)} /></div>
                 <div className="flex items-center justify-between">
-                  <Mini value={cur.marginLeft} onChange={(v) => set("marginLeft", v)} />
+                  <Mini value={margin.left} onChange={(v) => setBox("margin", "left", v)} />
                   <div className="mx-1 flex-1 rounded-md bg-green-50 p-1 text-green-600">
                     <div>Padding</div>
-                    <div className="flex justify-center"><Mini value={cur.paddingTop} onChange={(v) => set("paddingTop", v)} /></div>
+                    <div className="flex justify-center"><Mini value={padding.top} onChange={(v) => setBox("padding", "top", v)} /></div>
                     <div className="flex items-center justify-between">
-                      <Mini value={cur.paddingLeft} onChange={(v) => set("paddingLeft", v)} />
+                      <Mini value={padding.left} onChange={(v) => setBox("padding", "left", v)} />
                       <div className="h-5 w-8 rounded bg-white" />
-                      <Mini value={cur.paddingRight} onChange={(v) => set("paddingRight", v)} />
+                      <Mini value={padding.right} onChange={(v) => setBox("padding", "right", v)} />
                     </div>
-                    <div className="flex justify-center"><Mini value={cur.paddingBottom} onChange={(v) => set("paddingBottom", v)} /></div>
+                    <div className="flex justify-center"><Mini value={padding.bottom} onChange={(v) => setBox("padding", "bottom", v)} /></div>
                   </div>
-                  <Mini value={cur.marginRight} onChange={(v) => set("marginRight", v)} />
+                  <Mini value={margin.right} onChange={(v) => setBox("margin", "right", v)} />
                 </div>
-                <div className="flex justify-center"><Mini value={cur.marginBottom} onChange={(v) => set("marginBottom", v)} /></div>
+                <div className="flex justify-center"><Mini value={margin.bottom} onChange={(v) => setBox("margin", "bottom", v)} /></div>
               </div>
-              <p className="text-[11px] text-gray-500">Use values like 16px, 2rem, auto. Padding shorthand is not used so each side stays editable.</p>
+              <p className="text-[11px] text-gray-500">Use values like 16px, 2rem, auto. Shorthand padding and margin values are shown per side.</p>
             </Section>
 
             <Section title="Positioning" open={false}>
@@ -807,7 +950,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
               <Field label="Z-index"><Inp value={cur.zIndex} onChange={(v) => set("zIndex", v)} placeholder="auto" /></Field>
             </Section>
 
-            {isTxt && (
+            {(isTxt || isPage) && (
               <Section title="Typography">
                 <Field label="Font"><Inp value={cur.fontFamily} onChange={(v) => set("fontFamily", v)} placeholder="inherit" /></Field>
                 <Field label="Size"><Inp value={cur.fontSize} onChange={(v) => set("fontSize", v)} placeholder="16px" /></Field>
@@ -897,10 +1040,10 @@ function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
           </div>
         )}
 
-        <div className="mt-3 flex gap-2">
+        {!isPage && <div className="mt-3 flex gap-2">
           <button onClick={() => api.dup(n.id)} className="flex-1 rounded-md border border-gray-200 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Duplicate</button>
           <button onClick={() => api.remove(n.id)} className="flex-1 rounded-md border border-red-200 py-1.5 text-xs text-red-600 hover:bg-red-50">Delete</button>
-        </div>
+        </div>}
       </div>
     </div>
   );
@@ -949,16 +1092,17 @@ function DimPanel({ d, width, onChange, onClose }) {
 }
 
 /* ------------------------------ main app --------------------------- */
-const initialPage = () => ({
+const initialPage = () => fixPage({
   name: "My page",
   title: "My page",
-  bg: "#ffffff",
-  font: "Inter, system-ui, sans-serif",
   children: [SECTIONS[1].items[0].build(), SECTIONS[0].items[0].build()],
 });
 const STORE = "replo-clone:page";
 const loadPage = () => {
-  try { const s = localStorage.getItem(STORE); if (s) return JSON.parse(s); } catch (e) { /* ignore */ }
+  try {
+    const s = localStorage.getItem(STORE);
+    if (s) { const j = JSON.parse(s); if (j && Array.isArray(j.children)) return fixPage(j); }
+  } catch (e) { /* storage unavailable or corrupt */ }
   return initialPage();
 };
 
@@ -980,7 +1124,18 @@ export default function Editor() {
   const [dropTarget, setDropTarget] = useState(null);
   const [pop, setPop] = useState(null); // settings | publish | previewMenu | nameEdit
   const [preview, setPreview] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const toastTimer = useRef(null);
   const importRef = useRef(null);
+
+  const notify = (msg) => {
+    setToast(msg);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2500);
+  };
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+  useEffect(() => { if (pop !== "settings") setConfirmClear(false); }, [pop]);
 
   /* infinite canvas state */
   const [pan, setPan] = useState({ x: 450, y: 110 });
@@ -990,7 +1145,6 @@ export default function Editor() {
   const canvasRef = useRef(null);
   const drag = useRef(null);
   const justPanned = useRef(false);
-  const panGesture = useRef(false);
   const justZoomed = useRef(false);
   const view = useRef({ zoom, pan });
   view.current = { zoom, pan };
@@ -1019,17 +1173,17 @@ export default function Editor() {
     const onBg = !e.target.closest("[data-nopan]");
     if (!(e.button === 1 || (e.button === 0 && (onBg || space)))) return;
     e.preventDefault();
-    panGesture.current = true;
+    document.activeElement?.blur?.(); // preventDefault stops the browser doing this itself
     drag.current = { sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y, moved: false };
     setPanning(true);
   };
+  /* swallow the click that ends a pan drag (or any click while Space is held) */
   const preventPanSelection = (e) => {
-    if (!space && !panGesture.current && !justPanned.current) return;
+    if (!space && !justPanned.current) return;
     e.preventDefault();
     e.stopPropagation();
     setPop(null);
     setDimPop(null);
-    panGesture.current = false;
     justPanned.current = false;
   };
 
@@ -1080,12 +1234,22 @@ export default function Editor() {
       if (e.code === "Space" && !/INPUT|TEXTAREA|SELECT|BUTTON/.test(e.target.tagName) && !e.target.isContentEditable) { e.preventDefault(); setSpace(true); }
     };
     const up = (e) => { if (e.code === "Space") setSpace(false); };
+    const blur = () => setSpace(false);
     window.addEventListener("keydown", dn);
     window.addEventListener("keyup", up);
-    return () => { window.removeEventListener("keydown", dn); window.removeEventListener("keyup", up); };
+    window.addEventListener("blur", blur);
+    return () => { window.removeEventListener("keydown", dn); window.removeEventListener("keyup", up); window.removeEventListener("blur", blur); };
   }, []);
 
   useEffect(() => { fit(); }, []);
+
+  /* keep the active device among the visible ones */
+  useEffect(() => {
+    if (!show[activeDevice]) {
+      const f = Object.keys(DEVICES).find((d) => show[d]);
+      if (f) setActiveDevice(f);
+    }
+  }, [show, activeDevice]);
 
   /* history */
   const update = (fn, key) => {
@@ -1101,10 +1265,17 @@ export default function Editor() {
   const undo = () => setHist((h) => (h.past.length ? { past: h.past.slice(0, -1), present: h.past[h.past.length - 1], future: [h.present, ...h.future] } : h));
   const redo = () => setHist((h) => (h.future.length ? { past: [...h.past, h.present], present: h.future[0], future: h.future.slice(1) } : h));
 
-  useEffect(() => { try { localStorage.setItem(STORE, JSON.stringify(page)); } catch (e) { /* ignore */ } }, [page]);
+  /* debounced autosave (localStorage may be unavailable, e.g. in sandboxed previews) */
+  useEffect(() => {
+    const t = setTimeout(() => { try { localStorage.setItem(STORE, JSON.stringify(page)); } catch (e) { /* ignore */ } }, 400);
+    return () => clearTimeout(t);
+  }, [page]);
 
   /* selection */
-  const selNode = selId ? findNode(page.children, selId) : null;
+  const pageNode = pageNodeOf(page);
+  const pageStyleFor = (d) => ({ boxSizing: "border-box", background: "#ffffff", ...resolveStyle(pageNode, d, false) });
+  const selNode = selId === PAGE_ID ? pageNode : selId ? findNode(page.children, selId) : null;
+  useEffect(() => { if (selId && !selNode) setSelId(null); });
   const select = (id, d) => {
     setSelId(id);
     setDimPop(null);
@@ -1113,7 +1284,12 @@ export default function Editor() {
   };
 
   /* mutations */
-  const patchId = (id, fn, key) => update((p) => ({ ...p, children: mapTree(p.children, id, fn) }), key && id + key);
+  const patchId = (id, fn, key) => update((p) => (id === PAGE_ID ? { ...p, s: fn(pageNodeOf(p)).s } : { ...p, children: mapTree(p.children, id, fn) }), key && id + key);
+  const setPageBase = (k, v) => update((p) => {
+    const base = { ...p.s.base };
+    if (v === "" || v == null) delete base[k]; else base[k] = v;
+    return { ...p, s: { ...p.s, base } };
+  }, "pg:" + k);
   const api = {
     device: activeDevice,
     select,
@@ -1127,7 +1303,7 @@ export default function Editor() {
     setProps: (obj) => patchId(selId, (n) => ({ ...n, props: { ...n.props, ...obj } }), `p:${Object.keys(obj).join()}`),
     rename: (id, name) => patchId(id, (n) => ({ ...n, name }), "rename"),
     toggleHide: (id, d) => patchId(id, (n) => ({ ...n, hide: { ...n.hide, [d || activeDevice]: !n.hide[d || activeDevice] } })),
-    remove: (id) => { update((p) => ({ ...p, children: removeNode(p.children, id) })); if (selId === id) setSelId(null); },
+    remove: (id) => { update((p) => ({ ...p, children: removeNode(p.children, id) })); },
     dup: (id) => {
       const orig = findNode(page.children, id);
       if (!orig) return;
@@ -1138,22 +1314,31 @@ export default function Editor() {
       update((p) => ({ ...p, children: insertInto(p.children, parent ?? null, copy, idx) }));
       setSelId(copy.id);
     },
-    move: (id, dir) => update((p) => ({ ...p, children: shift(p.children, id, dir) })),
+    move: (id, dir) => update((p) => {
+      const children = shift(p.children, id, dir);
+      return children === p.children ? p : { ...p, children };
+    }),
   };
 
-  const targetParent = () => {
-    if (!selNode) return null;
-    if (selNode.type === "container") return selNode.id;
-    return findParentId(page.children, selNode.id) ?? null;
-  };
-  const addNode = (nn, parentId = targetParent()) => {
+  const addNode = (nn, parentId = null) => {
     update((p) => ({ ...p, children: insertInto(p.children, parentId, nn) }));
+    setSelId(nn.id);
+  };
+  /* click-to-add: empty container -> inside it; otherwise as a NEW sibling right after the selection;
+     nothing selected -> end of page. (Dragging onto a container still nests explicitly.) */
+  const addAfterSelection = (nn) => {
+    if (!selNode || selNode.id === PAGE_ID) return addNode(nn, null);
+    if (selNode.type === "container" && selNode.children.length === 0) return addNode(nn, selNode.id);
+    const parent = findParentId(page.children, selNode.id) ?? null;
+    const list = parent == null ? page.children : findNode(page.children, parent).children;
+    const idx = list.findIndex((x) => x.id === selNode.id) + 1;
+    update((p) => ({ ...p, children: insertInto(p.children, parent, nn, idx) }));
     setSelId(nn.id);
   };
   const addSection = (nn) => addNode(nn, null);
   const useAsset = (a) => {
     if (selNode && selNode.type === "image") api.setProps({ src: a.src });
-    else { const nn = Img(a.src, { height: "auto" }); nn.props.alt = a.name; addNode(nn); }
+    else { const nn = Img(a.src, { height: "auto" }); nn.props.alt = a.name; addAfterSelection(nn); }
   };
   const dropAsset = (e, targetId) => {
     e.preventDefault();
@@ -1229,13 +1414,19 @@ export default function Editor() {
     const h = (e) => {
       const t = e.target;
       if (/INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable) return;
+      if (e.key === "Escape") {
+        if (preview) setPreview(null); else setSelId(null);
+        setPop(null);
+        setDimPop(null);
+        return;
+      }
+      if (preview) return; // no editing shortcuts while previewing
       const mod = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
       if (mod && k === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); }
       else if (mod && k === "y") { e.preventDefault(); redo(); }
-      else if (mod && k === "d" && selId) { e.preventDefault(); api.dup(selId); }
-      else if ((e.key === "Delete" || e.key === "Backspace") && selId) { e.preventDefault(); api.remove(selId); }
-      else if (e.key === "Escape") setSelId(null);
+      else if (mod && k === "d" && selId && selId !== PAGE_ID) { e.preventDefault(); api.dup(selId); }
+      else if ((e.key === "Delete" || e.key === "Backspace") && selId && selId !== PAGE_ID) { e.preventDefault(); api.remove(selId); }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
@@ -1243,16 +1434,32 @@ export default function Editor() {
 
   /* publish helpers */
   const download = (name, text, type) => {
+    const url = URL.createObjectURL(new Blob([text], { type }));
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([text], { type }));
+    a.href = url;
     a.download = name;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(a.href);
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  const slug = (page.name || "page").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const copyJSON = async () => {
+    try { await navigator.clipboard.writeText(JSON.stringify(page)); notify("JSON copied to clipboard"); }
+    catch (e) { notify("Clipboard blocked by the browser. Use Download JSON instead."); }
+  };
+  const slug = (page.name || "page").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "page";
   const importJSON = (file) => {
     const r = new FileReader();
-    r.onload = () => { try { const j = JSON.parse(r.result); if (j && Array.isArray(j.children)) { update(() => j); setSelId(null); setPop(null); } } catch (e) { alert("Invalid JSON file"); } };
+    r.onload = () => {
+      try {
+        const j = JSON.parse(r.result);
+        if (!j || !Array.isArray(j.children)) throw new Error("bad shape");
+        update(() => fixPage(j));
+        setSelId(null);
+        setPop(null);
+        notify("Page imported");
+      } catch (e) { notify("Invalid page JSON file"); }
+    };
     r.readAsText(file);
   };
 
@@ -1287,14 +1494,14 @@ export default function Editor() {
         onDrop={(e) => { drop(e, null); setDraggingComponent(false); }}
         onClickCapture={preventPanSelection}
         onAuxClickCapture={preventPanSelection}
-        onClick={() => { if (justPanned.current || justZoomed.current) { justPanned.current = false; justZoomed.current = false; return; } select(null); }}>
+        onClick={() => { if (justZoomed.current) { justZoomed.current = false; return; } select(null); }}>
         <div className="absolute left-0 top-0 flex items-start"
           style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${s})`, transformOrigin: "0 0", gap: 16 / s, width: "max-content" }}>
           <style>{`.rp-frame *{box-sizing:border-box}.rp-frame :where(h1,h2,h3,h4,h5,h6,p,ul,hr){margin:0}.rp-frame button{font-family:inherit}`}</style>
           {visible.map((d, i) => {
             const W = widths[d];
             return (
-              <div key={d} data-nopan className="relative shrink-0" style={{ width: W }} onClick={(e) => e.stopPropagation()}>
+              <div key={d} data-nopan className="group relative shrink-0" style={{ width: W }} onClick={(e) => e.stopPropagation()}>
                 {/* header: always screen-size, whatever the zoom */}
                 <div style={{ width: W, height: 58 / s }}>
                   <div className="relative flex items-center gap-2 rounded-lg bg-white px-3 shadow-sm ring-1 ring-black/5"
@@ -1312,10 +1519,13 @@ export default function Editor() {
                   </div>
                 </div>
                 <Ctx.Provider value={ctx}>
-                  <div className="rp-frame bg-white shadow ring-1 ring-black/10" style={{ width: W, background: page.bg, fontFamily: page.font }}
+                  <div className="rp-frame relative shadow ring-1 ring-black/10" style={{ ...pageStyleFor(d), width: W, ...(selId === PAGE_ID && activeDevice === d ? { outline: "2px solid #2563eb", outlineOffset: "-2px" } : {}) }}
                     onClick={() => select(null, d)}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => drop(e, null)}>
+                    <button title="Select page" onClick={(e) => { e.stopPropagation(); select(PAGE_ID, d); }}
+                      className={`absolute left-0 top-0 z-20 rounded-br-md bg-blue-600 px-2 py-0.5 text-[11px] font-medium text-white ${selId === PAGE_ID && activeDevice === d ? "block" : "hidden group-hover:block"}`}
+                      style={{ transform: `scale(${1 / s})`, transformOrigin: "0 0" }}>Page</button>
                     {page.children.map((n) => <Render key={n.id} n={n} device={d} isPageSection />)}
                     {draggingComponent && (
                       <div
@@ -1354,9 +1564,17 @@ export default function Editor() {
           <div className="absolute left-0 top-[60px] w-[300px] space-y-3 rounded-xl bg-white p-4 shadow-lg ring-1 ring-black/5">
             <span className="text-[13px] font-semibold">Page settings</span>
             <Field label="Title"><Inp value={page.title} onChange={(v) => update((p) => ({ ...p, title: v }), "title")} /></Field>
-            <Field label="Background"><Color value={page.bg} onChange={(v) => update((p) => ({ ...p, bg: v }), "bg")} /></Field>
-            <Field label="Font"><Inp value={page.font} onChange={(v) => update((p) => ({ ...p, font: v }), "font")} /></Field>
-            <button onClick={() => { if (confirm("Clear the whole page?")) { update((p) => ({ ...p, children: [] })); setSelId(null); } }} className="w-full rounded-md border border-red-200 py-1.5 text-xs text-red-600 hover:bg-red-50">Clear page</button>
+            <Field label="Background"><Color value={page.s.base.background} onChange={(v) => setPageBase("background", v)} /></Field>
+            <Field label="Font"><Inp value={page.s.base.fontFamily} onChange={(v) => setPageBase("fontFamily", v)} /></Field>
+            {/* window.confirm is blocked in sandboxed iframes, so confirm inline */}
+            {confirmClear ? (
+              <div className="flex gap-2">
+                <button onClick={() => { update((p) => ({ ...p, children: [] })); setSelId(null); setConfirmClear(false); }} className="flex-1 rounded-md bg-red-600 py-1.5 text-xs font-medium text-white hover:bg-red-700">Yes, clear page</button>
+                <button onClick={() => setConfirmClear(false)} className="flex-1 rounded-md border border-gray-200 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmClear(true)} className="w-full rounded-md border border-red-200 py-1.5 text-xs text-red-600 hover:bg-red-50">Clear page</button>
+            )}
           </div>
         )}
       </div>
@@ -1376,10 +1594,10 @@ export default function Editor() {
               <button onClick={() => setLeftOpen(false)} className="text-gray-400 hover:text-gray-700"><Ico n="left" size={16} /></button>
             </div>
             {leftTab === "sections" && <SectionsPanel onAdd={addSection} onDragStateChange={setDraggingComponent} />}
-            {leftTab === "components" && <ComponentsPanel onAdd={(nn) => addNode(nn)} onDragStateChange={setDraggingComponent} />}
+            {leftTab === "components" && <ComponentsPanel onAdd={addAfterSelection} onDragStateChange={setDraggingComponent} />}
             {leftTab === "layers" && (
               <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 210px)" }}>
-                <div className="mb-1 flex items-center gap-1 px-1 text-xs font-medium text-gray-700"><Ico n="page" size={14} />Page</div>
+                <button onClick={() => select(PAGE_ID)} className={`mb-1 flex w-full items-center gap-1 rounded-md px-1 py-1 text-left text-xs font-medium ${selId === PAGE_ID ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`}><Ico n="page" size={14} />Page</button>
                 {page.children.map((n) => <LayerItem key={n.id} n={n} depth={1} api={api} selectedId={selId} />)}
                 {!page.children.length && <p className="p-2 text-xs text-gray-500">Nothing here yet.</p>}
               </div>
@@ -1407,10 +1625,10 @@ export default function Editor() {
               <div className="text-[13px] font-semibold">Publish</div>
               <button onClick={() => download(slug + ".html", exportHTML(page), "text/html")} className="w-full rounded-md bg-gray-900 py-2 text-xs font-medium text-white">Download HTML page</button>
               <button onClick={() => download(slug + ".json", JSON.stringify(page, null, 2), "application/json")} className="w-full rounded-md border border-gray-200 py-2 text-xs hover:bg-gray-50">Download JSON</button>
-              <button onClick={() => navigator.clipboard?.writeText(JSON.stringify(page))} className="w-full rounded-md border border-gray-200 py-2 text-xs hover:bg-gray-50">Copy JSON</button>
+              <button onClick={copyJSON} className="w-full rounded-md border border-gray-200 py-2 text-xs hover:bg-gray-50">Copy JSON</button>
               <button onClick={() => importRef.current.click()} className="w-full rounded-md border border-gray-200 py-2 text-xs hover:bg-gray-50">Import JSON</button>
               <input ref={importRef} type="file" accept="application/json" hidden onChange={(e) => { if (e.target.files[0]) importJSON(e.target.files[0]); e.target.value = ""; }} />
-              <p className="text-[11px] text-gray-500">The HTML file uses your styles, mobile/tablet overrides, hover states and Tailwind classes (via CDN).</p>
+              <p className="text-[11px] text-gray-500">The HTML file uses your styles, mobile/tablet overrides and hover states. Tailwind (via CDN) is included only if you used Tailwind classes.</p>
             </div>
           )}
         </div>
@@ -1422,7 +1640,7 @@ export default function Editor() {
         <IconBtn n="redo" title="Redo (Ctrl+Shift+Z)" onClick={redo} />
         <span className="mx-1 h-5 w-px bg-gray-200" />
         <select value={Math.round(zoom)} onChange={(e) => zoomAt(+e.target.value, window.innerWidth / 2, window.innerHeight / 2)} className="rounded-md border border-gray-200 px-2 py-1 text-xs">
-          {[...new Set([10, 25, 33, 50, 75, 100, 125, 150, 200, 300, Math.round(zoom)])].sort((a, b) => a - b).map((z) => <option key={z} value={z}>{z}%</option>)}
+          {[...new Set([10, 25, 33, 50, 75, 100, 125, 150, 200, 300, 400, Math.round(zoom)])].sort((a, b) => a - b).map((z) => <option key={z} value={z}>{z}%</option>)}
         </select>
         <button onClick={fit} className="rounded-md border border-gray-200 px-2 py-1 text-xs hover:bg-gray-50">Fit</button>
       </div>
@@ -1461,13 +1679,18 @@ export default function Editor() {
           </div>
           <div className="flex-1 overflow-auto p-6">
             <Ctx.Provider value={{ preview: true }}>
-              <div className="rp-frame mx-auto bg-white shadow-lg" style={{ width: Math.min(widths[preview], 1600), maxWidth: "100%", minHeight: "100%", background: page.bg, fontFamily: page.font }}>
+              <div className="rp-frame mx-auto shadow-lg" style={{ maxWidth: "100%", minHeight: "100%", ...pageStyleFor(preview), width: Math.min(widths[preview], 1600) }}>
                 <style>{`.rp-frame *{box-sizing:border-box}.rp-frame :where(h1,h2,h3,h4,h5,h6,p,ul,hr){margin:0}.rp-frame button{font-family:inherit}`}</style>
                 {page.children.map((n) => <Render key={n.id} n={n} device={preview} />)}
               </div>
             </Ctx.Provider>
           </div>
         </div>
+      )}
+
+      {/* toast */}
+      {toast && (
+        <div className="pointer-events-none fixed left-1/2 -translate-x-1/2 rounded-lg bg-gray-900 px-4 py-2 text-xs font-medium text-white shadow-lg" style={{ bottom: 76, zIndex: 60 }}>{toast}</div>
       )}
     </div>
   );
