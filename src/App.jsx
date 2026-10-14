@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useContext, createContext } from "react";
-import { createPortal } from "react-dom";
 import {
   ArrowDown, ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Circle,
   Columns2, Copy, Eye, FileText, Grid2X2, Heading1, Heading2, Heading3,
@@ -660,72 +659,83 @@ const SearchBox = ({ value, onChange, placeholder }) => (
     <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full bg-transparent text-xs text-gray-800 outline-none" />
   </div>
 );
-function SectionsPanel({ onAdd, onDragStateChange }) {
-  const [q, setQ] = useState("");
-  const [open, setOpen] = useState(null);
-  const [hovered, setHovered] = useState(null);
-  const [flyout, setFlyout] = useState(null);
-  const hoverTimer = useRef(null);
-  const list = SECTIONS.filter((s) => (s.name + s.desc + s.items.map((i) => i.name).join(" ")).toLowerCase().includes(q.toLowerCase()));
-  const showFlyout = (section, element) => {
-    clearTimeout(hoverTimer.current);
-    const bounds = element.getBoundingClientRect();
-    const height = Math.min(88 + section.items.length * 52, window.innerHeight - 24);
-    setHovered(section.id);
-    setFlyout({
-      section,
-      left: bounds.right + 6,
-      top: Math.max(12, Math.min(bounds.top, window.innerHeight - height - 12)),
-    });
-  };
-  const deferFlyoutClose = () => {
-    clearTimeout(hoverTimer.current);
-    hoverTimer.current = setTimeout(() => {
-      if (open !== hovered) setHovered(null);
-      setFlyout(null);
-    }, 120);
-  };
-  useEffect(() => () => clearTimeout(hoverTimer.current), []);
+function SectionThumbnail({ item }) {
+  const [sample] = useState(() => item.build());
+  const [height, setHeight] = useState(20);
+  const contentRef = useRef(null);
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    const updateHeight = () => setHeight(Math.max(20, Math.min(120, content.offsetHeight * 0.2)));
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(content);
+    updateHeight();
+    return () => observer.disconnect();
+  }, []);
   return (
-    <>
-      <SearchBox value={q} onChange={(value) => { setQ(value); setHovered(null); setFlyout(null); }} placeholder="Search sections…" />
-      <div className="mt-2 min-h-0 flex-1 space-y-1 overflow-x-hidden overflow-y-auto pr-1">
-        {list.map((s) => (
-          <div key={s.id} onMouseEnter={(e) => showFlyout(s, e.currentTarget)} onMouseLeave={deferFlyoutClose}>
-            <button onFocus={(e) => showFlyout(s, e.currentTarget)} onClick={() => setOpen(open === s.id ? null : s.id)} className="flex w-full items-center justify-between rounded-lg p-2 text-left hover:bg-gray-50">
-              <span><span className="block text-[13px] font-semibold text-gray-900">{s.name}</span><span className="block text-xs text-gray-500">{s.desc}</span></span>
-              <span className="text-gray-400"><Ico n={open === s.id || hovered === s.id ? "down" : "right"} size={14} /></span>
-            </button>
-          </div>
-        ))}
-        {!list.length && <p className="p-2 text-xs text-gray-500">No sections found.</p>}
+    <div className="rp-frame pointer-events-none relative overflow-hidden bg-white" style={{ height }}>
+      <div ref={contentRef} className="absolute left-0 top-0 w-[1000px] origin-top-left" style={{ transform: "scale(0.2)" }}>
+        <Ctx.Provider value={{ preview: true }}>
+          <Render n={sample} device="desktop" />
+        </Ctx.Provider>
       </div>
-      {flyout && createPortal(
-        <div
-          className="fixed z-[100] w-[220px] space-y-2 overflow-y-auto rounded-xl border border-gray-100 bg-white p-2 shadow-xl"
-          style={{ left: flyout.left, top: flyout.top, maxHeight: "calc(100vh - 24px)" }}
-          onMouseEnter={() => clearTimeout(hoverTimer.current)}
-          onMouseLeave={deferFlyoutClose}
-        >
-          <div className="px-1 pb-1 text-xs font-semibold text-gray-500">{flyout.section.name}</div>
-          {flyout.section.items.map((it, index) => (
-            <button key={it.name} draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData("text/x-section", `${flyout.section.id}:${index}`);
-                e.dataTransfer.effectAllowed = "copy";
-                onDragStateChange(true);
-              }}
-              onDragEnd={() => onDragStateChange(false)}
-              onClick={() => onAdd(it.build())}
-              className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-3 text-left text-xs font-medium text-gray-700 transition-colors hover:border-blue-400 hover:bg-blue-50">+ {it.name}</button>
-          ))}
-        </div>,
-        document.body
-      )}
-    </>
+    </div>
   );
 }
-function ComponentsPanel({ onAdd, onDragStateChange }) {
+function SectionsPanel({ onAdd, onPreviewVisibilityChange }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(null);
+  const [activeSectionId, setActiveSectionId] = useState(null);
+  const list = SECTIONS.filter((s) => (s.name + s.desc + s.items.map((i) => i.name).join(" ")).toLowerCase().includes(q.toLowerCase()));
+  const activeSection = list.find((section) => section.id === activeSectionId);
+  const setActiveSection = (sectionId) => {
+    setActiveSectionId(sectionId);
+    onPreviewVisibilityChange(Boolean(sectionId));
+  };
+  return (
+    <div className="mt-1 flex min-h-0 flex-1 gap-2" onMouseLeave={() => setActiveSection(null)}>
+      <div className={`flex ${activeSection ? "w-[240px] max-w-[50%] shrink-0" : "w-full min-w-0"} flex-col`}>
+        <SearchBox value={q} onChange={(value) => { setQ(value); setActiveSection(null); }} placeholder="Search sections…" />
+        <div className="mt-2 min-h-0 flex-1 space-y-1 overflow-x-hidden overflow-y-auto pr-1">
+          {list.map((s) => (
+            <div key={s.id} onMouseEnter={() => setActiveSection(s.id)}>
+              <button
+                onFocus={() => setActiveSection(s.id)}
+                onClick={() => { setActiveSection(s.id); setOpen(open === s.id ? null : s.id); }}
+                className={`flex w-full items-center justify-between rounded-lg p-2 text-left ${activeSection?.id === s.id ? "bg-gray-50" : "hover:bg-gray-50"}`}
+              >
+                <span><span className="block text-[13px] font-semibold text-gray-900">{s.name}</span><span className="block text-xs text-gray-500">{s.desc}</span></span>
+                <span className="text-gray-400"><Ico n={open === s.id ? "down" : "right"} size={14} /></span>
+              </button>
+            </div>
+          ))}
+          {!list.length && <p className="p-2 text-xs text-gray-500">No sections found.</p>}
+        </div>
+      </div>
+      {activeSection && (
+        <div className="flex min-w-0 flex-1 flex-col border-l border-gray-100 pl-2">
+          <div className="mb-2 px-1 text-xs font-semibold text-gray-800">{activeSection.name}</div>
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+            {activeSection.items.map((it, index) => (
+                <button key={it.name} draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("text/x-section", `${activeSection.id}:${index}`);
+                    e.dataTransfer.effectAllowed = "copy";
+                  }}
+                  onClick={() => onAdd(it.build())}
+                  aria-label={`Add ${it.name}`}
+                  title={it.name}
+                  className="block w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-50 text-left transition-colors hover:border-blue-400 hover:bg-blue-50">
+                  <SectionThumbnail item={it} />
+                </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+function ComponentsPanel({ onAdd }) {
   const [q, setQ] = useState("");
   const list = COMPONENTS.filter((c) => c.label.toLowerCase().includes(q.toLowerCase()));
   return (
@@ -735,8 +745,7 @@ function ComponentsPanel({ onAdd, onDragStateChange }) {
       <div className="mt-2 grid min-h-0 flex-1 grid-cols-2 content-start gap-2 overflow-y-auto pr-1">
         {list.map((c) => (
           <button key={c.key} draggable
-            onDragStart={(e) => { e.dataTransfer.setData("text/x-comp", c.key); e.dataTransfer.effectAllowed = "copy"; onDragStateChange(true); }}
-            onDragEnd={() => onDragStateChange(false)}
+            onDragStart={(e) => { e.dataTransfer.setData("text/x-comp", c.key); e.dataTransfer.effectAllowed = "copy"; }}
             onClick={() => onAdd(c.build())}
             className="flex h-[84px] flex-col items-center justify-center gap-1 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 hover:border-blue-400 hover:bg-blue-50">
             <span className="text-blue-600"><Ico n={c.glyph} size={20} /></span>
@@ -1197,11 +1206,11 @@ export default function Editor() {
   const [stateTab, setStateTab] = useState("default");
   const [leftTab, setLeftTab] = useState("sections");
   const [leftOpen, setLeftOpen] = useState(true);
+  const [sectionPreviewsVisible, setSectionPreviewsVisible] = useState(false);
   const [zoom, setZoom] = useState(50);
   const [show, setShow] = useState({ desktop: true, tablet: true, mobile: true });
   const [widths, setWidths] = useState({ desktop: 1440, tablet: 810, mobile: 393 });
   const [assets, setAssets] = useState([]);
-  const [draggingComponent, setDraggingComponent] = useState(false);
   const [draggingSection, setDraggingSection] = useState(false);
   const [sectionDragOutline, setSectionDragOutline] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
@@ -1277,7 +1286,7 @@ export default function Editor() {
   };
   const fit = () => {
     cancelWheelZoom();
-    const left = leftOpen ? 390 : 110;
+    const left = leftOpen ? leftTab === "sections" ? sectionPreviewsVisible ? 610 : 350 : 390 : 110;
     const vis = Object.keys(DEVICES).filter((d) => show[d]);
     const total = vis.reduce((a, d) => a + widths[d], 0);
     const avail = window.innerWidth - left - 140 - 16 * Math.max(0, vis.length - 1);
@@ -1572,15 +1581,13 @@ export default function Editor() {
       const [sectionId, rawIndex] = sectionKey.split(":");
       const item = SECTIONS.find((section) => section.id === sectionId)?.items[Number(rawIndex)];
       if (item) addSectionAtDrop(item.build(), e);
-      setDraggingComponent(false);
       return;
     }
     const assetId = e.dataTransfer.getData("text/x-asset");
-    if (assetId) { dropAsset(e, parentId); setDraggingComponent(false); return; }
+    if (assetId) { dropAsset(e, parentId); return; }
     const key = e.dataTransfer.getData("text/x-comp");
     const def = COMPONENTS.find((c) => c.key === key);
     if (def) addNode(def.build(), parentId);
-    setDraggingComponent(false);
   };
 
   /* keyboard */
@@ -1658,7 +1665,7 @@ export default function Editor() {
   const visible = Object.keys(DEVICES).filter((d) => show[d]);
 
   const railBtn = (id, icon, title) => (
-    <button key={id} title={title} onClick={() => { if (leftTab === id && leftOpen) setLeftOpen(false); else { setLeftTab(id); setLeftOpen(true); } }}
+    <button key={id} title={title} onClick={() => { if (leftTab === id && leftOpen) { setLeftOpen(false); setSectionPreviewsVisible(false); } else { setLeftTab(id); setLeftOpen(true); setSectionPreviewsVisible(false); } }}
       className={`flex h-9 w-9 items-center justify-center rounded-lg ${leftTab === id && leftOpen ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-100"}`}>
       <Ico n={icon} />
     </button>
@@ -1686,7 +1693,7 @@ export default function Editor() {
             } : outline);
           }
         }}
-        onDrop={(e) => { drop(e, null); setDraggingComponent(false); }}
+        onDrop={(e) => drop(e, null)}
         onClickCapture={preventPanSelection}
         onAuxClickCapture={preventPanSelection}
         onClick={() => { if (justZoomed.current) { justZoomed.current = false; return; } select(null); }}>
@@ -1722,15 +1729,6 @@ export default function Editor() {
                       className={`absolute left-0 top-0 z-20 rounded-br-md bg-blue-600 px-2 py-0.5 text-[11px] font-medium text-white ${selId === PAGE_ID && activeDevice === d ? "block" : "hidden group-hover:block"}`}
                       style={{ transform: `scale(${1 / s})`, transformOrigin: "0 0" }}>Page</button>
                     {page.children.map((n) => <Render key={n.id} n={n} device={d} isPageSection />)}
-                    {draggingComponent && (
-                      <div
-                        className="m-3 flex min-h-16 items-center justify-center rounded-lg border-2 border-dashed border-blue-300 bg-blue-50/60 text-sm font-medium text-blue-600"
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => { e.stopPropagation(); drop(e, null); setDraggingComponent(false); }}
-                      >
-                        Drop to add at end
-                      </div>
-                    )}
                     {!page.children.length && <div className="flex h-[400px] items-center justify-center text-sm text-gray-400">Add a section from the left panel, or drop a component here.</div>}
                   </div>
                 </Ctx.Provider>
@@ -1800,13 +1798,13 @@ export default function Editor() {
           {railBtn("assets", "image", "Assets")}
         </div>
         {leftOpen && (
-          <div className="flex h-full w-[260px] flex-col overflow-hidden rounded-xl bg-white p-3 shadow-md ring-1 ring-black/5">
+          <div className={`flex h-full ${leftTab === "sections" && sectionPreviewsVisible ? "w-[520px] max-w-[calc(100vw-80px)]" : "w-[260px]"} flex-col overflow-hidden rounded-xl bg-white p-3 shadow-md ring-1 ring-black/5`}>
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm font-semibold capitalize">{leftTab}</span>
-              <button onClick={() => setLeftOpen(false)} className="text-gray-400 hover:text-gray-700"><Ico n="left" size={16} /></button>
+              <button onClick={() => { setLeftOpen(false); setSectionPreviewsVisible(false); }} className="text-gray-400 hover:text-gray-700"><Ico n="left" size={16} /></button>
             </div>
-            {leftTab === "sections" && <SectionsPanel onAdd={addSection} onDragStateChange={setDraggingComponent} />}
-            {leftTab === "components" && <ComponentsPanel onAdd={addAfterSelection} onDragStateChange={setDraggingComponent} />}
+            {leftTab === "sections" && <SectionsPanel onAdd={addSection} onPreviewVisibilityChange={setSectionPreviewsVisible} />}
+            {leftTab === "components" && <ComponentsPanel onAdd={addAfterSelection} />}
             {leftTab === "layers" && (
               <div className="min-h-0 flex-1 overflow-y-auto">
                 <button onClick={() => select(PAGE_ID)} className={`mb-1 flex w-full items-center gap-1 rounded-md px-1 py-1 text-left text-xs font-medium ${selId === PAGE_ID ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`}><Ico n="page" size={14} />Page</button>
