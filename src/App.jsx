@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useContext, createContext } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowDown, ArrowRight, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Circle,
   Columns2, Copy, Eye, FileText, Grid2X2, Heading1, Heading2, Heading3,
@@ -123,74 +124,114 @@ const COMPONENTS = [
 const faq = (q, a) => Box("FAQ Item", [H(q, 18, { fontWeight: "600" }, { fontSize: "18px" }, "h3"), T(a), node("hr", "Divider", {}, { width: "100%", height: "1px", background: "#e5e7eb", border: "none" })], { gap: "8px" });
 
 const SECTIONS = [
-  { id: "hero", name: "Hero", desc: "Grab attention", items: [
-    { name: "Split hero", build: () => Row("Hero Section", [
-      Box("Hero Copy", [H("Everything your customers need, in one place", 52, {}, {}, "h1"), T("One clear sentence about why this product is worth buying today.", { fontSize: "18px" }), Btn("Shop now")], { flex: "1", justifyContent: "center" }),
-      Img(ph(900, 700, "Hero image"), { flex: "1", height: "460px" }),
-    ], { padding: "64px 48px", gap: "48px", alignItems: "center", background: "#f9fafb" }, { padding: "32px 20px", gap: "24px" }) },
-    { name: "Centered hero", build: () => Box("Hero Section", [
-      H("Make your headline count", 56, { textAlign: "center" }, {}, "h1"),
-      T("Back it up with one honest sentence.", { fontSize: "20px", textAlign: "center", maxWidth: "640px" }),
-      Btn("Get started"), Img(ph(1200, 500, "Product shot"), { height: "380px" }),
-    ], { padding: "80px 48px", alignItems: "center", gap: "24px" }, { padding: "40px 20px" }) },
-  ] },
-  { id: "banners", name: "Banners", desc: "Drive urgency", items: [
-    { name: "Announcement bar", build: () => Box("Announcement", [T("Free shipping on orders over $50", { color: "#ffffff", textAlign: "center", fontWeight: "600", fontSize: "14px" })], { background: "#111827", padding: "10px 16px" }) },
-    { name: "Sale banner", build: () => Row("Sale Banner", [T("Autumn sale: 20% off everything", { color: "#7c2d12", fontWeight: "700", fontSize: "18px" }), Btn("Shop the sale", { padding: "10px 20px" })], { background: "#fed7aa", padding: "16px 32px", alignItems: "center", justifyContent: "center", gap: "20px" }) },
-  ] },
-  { id: "benefits", name: "Benefits & Features", desc: "Prove the value", items: [
-    { name: "3 benefit cards", build: () => Box("Benefits", [H("Why people love it", 36, { textAlign: "center" }), Row("Cards", [Card("🌿", "Natural", "Made from simple ingredients."), Card("🚚", "Fast delivery", "Ships within 24 hours."), Card("♻️", "Sustainable", "Packaging that can be recycled.")], { gap: "20px" })], { padding: "64px 48px" }, { padding: "32px 20px" }) },
-  ] },
-  { id: "product", name: "Product Detail", desc: "Sell that product", items: [
-    { name: "Product with buy box", build: () => Row("Product Detail", [
-      Img(ph(800, 800, "Product image"), { flex: "1", height: "auto", aspectRatio: "1 / 1" }),
-      Box("Buy Box", [
-        H("Product name", 36, {}, {}, "h1"),
-        Row("Rating", [Stars(5), T("(2,184 reviews)", { fontSize: "14px" })], { alignItems: "center", gap: "8px" }, { flexDirection: "row" }),
-        H("$49.00", 28, { fontWeight: "600" }, { fontSize: "28px" }, "h3"),
-        T("Short description of what the product does and who it is for."),
-        Btn("Add to cart", { width: "100%" }),
-      ], { flex: "1", justifyContent: "center" }),
-    ], { padding: "48px", gap: "48px" }, { padding: "20px", gap: "24px" }) },
-  ] },
-  { id: "cta", name: "Conversion CTAs", desc: "Drive more actions", items: [
-    { name: "Dark CTA", build: () => Box("CTA", [H("Ready to try it?", 40, { color: "#ffffff", textAlign: "center" }), T("30-day money back guarantee.", { color: "#d1d5db", textAlign: "center" }), Btn("Order now", { background: "#ffffff", color: "#111827" })], { background: "#111827", padding: "64px 24px", alignItems: "center" }, { padding: "40px 20px" }) },
-  ] },
-  { id: "compare", name: "Comparisons", desc: "Show why it wins", items: [
-    { name: "Comparison table", build: () => {
-      const row = (a, b, c, head) => {
-        const g = grid("Row", 3, [T(a, { fontWeight: head ? "700" : "500", color: "#111827" }), T(b, { fontWeight: head ? "700" : "400", textAlign: "center" }), T(c, { fontWeight: head ? "700" : "400", textAlign: "center" })], { padding: "12px 0", borderBottom: "1px solid #e5e7eb" });
-        g.s.base.gridTemplateColumns = "2fr 1fr 1fr";
-        g.s.mobile.gridTemplateColumns = "2fr 1fr 1fr";
-        return g;
-      };
-      return Box("Comparison", [H("Why we win", 36, { textAlign: "center" }), row("", "Us", "Others", true), row("Natural ingredients", "✓", "✗"), row("Free returns", "✓", "✗"), row("Lifetime support", "✓", "✓")], { padding: "64px 48px", maxWidth: "900px" }, { padding: "32px 20px" });
-    } },
-  ] },
-  { id: "proof", name: "Social Proof", desc: "Boost credibility", items: [
-    { name: "Testimonials", build: () => Box("Reviews", [H("Loved by thousands", 36, { textAlign: "center" }), Row("Review Cards", [1, 2, 3].map((i) =>
-      Box("Review", [Stars(5), T("“Short, specific quote about a real result.”", { color: "#111827" }), T("Customer " + i, { fontSize: "14px", fontWeight: "600" })], { flex: "1", padding: "24px", border: "1px solid #e5e7eb", borderRadius: "12px", gap: "10px" })), { gap: "20px" })], { padding: "64px 48px" }, { padding: "32px 20px" }) },
-  ] },
-  { id: "guarantees", name: "Guarantees", desc: "Reduce risk", items: [
-    { name: "Guarantee strip", build: () => Row("Guarantees", [["🛡️", "30-day guarantee"], ["↩️", "Free returns"], ["🔒", "Secure checkout"]].map(([i, t]) =>
-      Row("Item", [node("icon", "Icon", { text: i }, { fontSize: "28px" }), T(t, { fontWeight: "600", color: "#111827" })], { flex: "1", alignItems: "center", justifyContent: "center", gap: "12px" }, { flexDirection: "row" })), { padding: "32px 48px", background: "#f3f4f6" }, { padding: "20px", gap: "12px" }) },
-  ] },
-  { id: "faqs", name: "FAQs", desc: "Remove Objections", items: [
-    { name: "FAQ list", build: () => Box("FAQs", [H("Frequently asked questions", 36, { textAlign: "center" }), faq("How long does shipping take?", "Orders ship within 24 hours and arrive in 3–5 business days."), faq("What is your return policy?", "Return any item within 30 days for a full refund."), faq("Is it safe for everyday use?", "Yes. Add your real answer here.")], { padding: "64px 48px", maxWidth: "820px" }, { padding: "32px 20px" }) },
-  ] },
-  { id: "collections", name: "Collections", desc: "Show options", items: [
-    { name: "Collection grid", build: () => Box("Collections", [H("Shop by category", 36, { textAlign: "center" }), grid("Collection Grid", 3, ["Indoor", "Outdoor", "Gifts"].map((t) => Box("Collection", [Img(ph(600, 600, t), { height: "auto", aspectRatio: "1 / 1" }), H(t, 20, { textAlign: "center" }, {}, "h3")], { gap: "10px" })))], { padding: "64px 48px" }, { padding: "32px 20px" }) },
-  ] },
-  { id: "howto", name: "How to & Education", desc: "Guide and inform", items: [
-    { name: "3 steps", build: () => Box("How it works", [H("How it works", 36, { textAlign: "center" }), Row("Steps", ["Order", "Unbox", "Enjoy"].map((t, i) =>
-      Box("Step", [node("circle", "Step Number", { text: String(i + 1) }, { width: "48px", height: "48px", borderRadius: "9999px", background: "#111827", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "700" }), H(t, 22, {}, {}, "h3"), T("One short line explaining this step.")], { flex: "1", gap: "10px" })), { gap: "24px" })], { padding: "64px 48px" }, { padding: "32px 20px" }) },
-  ] },
-  { id: "about", name: "About & Story", desc: "Build connection", items: [
-    { name: "Founder story", build: () => Row("About", [Img(ph(700, 700, "Founder"), { flex: "1", height: "420px" }), Box("Story", [H("Why we started", 36), T("Tell the honest story of how and why this brand began. Keep it personal and specific.")], { flex: "1", justifyContent: "center" })], { padding: "64px 48px", gap: "48px", alignItems: "center" }, { padding: "32px 20px", gap: "24px" }) },
-  ] },
-  { id: "listicle", name: "Listicle", desc: "Inform and engage", items: [
-    { name: "Reasons list", build: () => Box("Listicle", [H("5 reasons to switch", 36), node("list", "List", { items: ["Reason one", "Reason two", "Reason three", "Reason four", "Reason five"] }, { listStyle: "decimal", paddingLeft: "24px", color: "#374151", lineHeight: "2", fontSize: "18px" })], { padding: "64px 48px", maxWidth: "820px" }, { padding: "32px 20px" }) },
-  ] },
+  {
+    id: "hero", name: "Hero", desc: "Grab attention", items: [
+      {
+        name: "Split hero", build: () => Row("Hero Section", [
+          Box("Hero Copy", [H("Everything your customers need, in one place", 52, {}, {}, "h1"), T("One clear sentence about why this product is worth buying today.", { fontSize: "18px" }), Btn("Shop now")], { flex: "1", justifyContent: "center" }),
+          Img(ph(900, 700, "Hero image"), { flex: "1", height: "460px" }),
+        ], { padding: "64px 48px", gap: "48px", alignItems: "center", background: "#f9fafb" }, { padding: "32px 20px", gap: "24px" })
+      },
+      {
+        name: "Centered hero", build: () => Box("Hero Section", [
+          H("Make your headline count", 56, { textAlign: "center" }, {}, "h1"),
+          T("Back it up with one honest sentence.", { fontSize: "20px", textAlign: "center", maxWidth: "640px" }),
+          Btn("Get started"), Img(ph(1200, 500, "Product shot"), { height: "380px" }),
+        ], { padding: "80px 48px", alignItems: "center", gap: "24px" }, { padding: "40px 20px" })
+      },
+    ]
+  },
+  {
+    id: "banners", name: "Banners", desc: "Drive urgency", items: [
+      { name: "Announcement bar", build: () => Box("Announcement", [T("Free shipping on orders over $50", { color: "#ffffff", textAlign: "center", fontWeight: "600", fontSize: "14px" })], { background: "#111827", padding: "10px 16px" }) },
+      { name: "Sale banner", build: () => Row("Sale Banner", [T("Autumn sale: 20% off everything", { color: "#7c2d12", fontWeight: "700", fontSize: "18px" }), Btn("Shop the sale", { padding: "10px 20px" })], { background: "#fed7aa", padding: "16px 32px", alignItems: "center", justifyContent: "center", gap: "20px" }) },
+    ]
+  },
+  {
+    id: "benefits", name: "Benefits & Features", desc: "Prove the value", items: [
+      { name: "3 benefit cards", build: () => Box("Benefits", [H("Why people love it", 36, { textAlign: "center" }), Row("Cards", [Card("🌿", "Natural", "Made from simple ingredients."), Card("🚚", "Fast delivery", "Ships within 24 hours."), Card("♻️", "Sustainable", "Packaging that can be recycled.")], { gap: "20px" })], { padding: "64px 48px" }, { padding: "32px 20px" }) },
+    ]
+  },
+  {
+    id: "product", name: "Product Detail", desc: "Sell that product", items: [
+      {
+        name: "Product with buy box", build: () => Row("Product Detail", [
+          Img(ph(800, 800, "Product image"), { flex: "1", height: "auto", aspectRatio: "1 / 1" }),
+          Box("Buy Box", [
+            H("Product name", 36, {}, {}, "h1"),
+            Row("Rating", [Stars(5), T("(2,184 reviews)", { fontSize: "14px" })], { alignItems: "center", gap: "8px" }, { flexDirection: "row" }),
+            H("$49.00", 28, { fontWeight: "600" }, { fontSize: "28px" }, "h3"),
+            T("Short description of what the product does and who it is for."),
+            Btn("Add to cart", { width: "100%" }),
+          ], { flex: "1", justifyContent: "center" }),
+        ], { padding: "48px", gap: "48px" }, { padding: "20px", gap: "24px" })
+      },
+    ]
+  },
+  {
+    id: "cta", name: "Conversion CTAs", desc: "Drive more actions", items: [
+      { name: "Dark CTA", build: () => Box("CTA", [H("Ready to try it?", 40, { color: "#ffffff", textAlign: "center" }), T("30-day money back guarantee.", { color: "#d1d5db", textAlign: "center" }), Btn("Order now", { background: "#ffffff", color: "#111827" })], { background: "#111827", padding: "64px 24px", alignItems: "center" }, { padding: "40px 20px" }) },
+    ]
+  },
+  {
+    id: "compare", name: "Comparisons", desc: "Show why it wins", items: [
+      {
+        name: "Comparison table", build: () => {
+          const row = (a, b, c, head) => {
+            const g = grid("Row", 3, [T(a, { fontWeight: head ? "700" : "500", color: "#111827" }), T(b, { fontWeight: head ? "700" : "400", textAlign: "center" }), T(c, { fontWeight: head ? "700" : "400", textAlign: "center" })], { padding: "12px 0", borderBottom: "1px solid #e5e7eb" });
+            g.s.base.gridTemplateColumns = "2fr 1fr 1fr";
+            g.s.mobile.gridTemplateColumns = "2fr 1fr 1fr";
+            return g;
+          };
+          return Box("Comparison", [H("Why we win", 36, { textAlign: "center" }), row("", "Us", "Others", true), row("Natural ingredients", "✓", "✗"), row("Free returns", "✓", "✗"), row("Lifetime support", "✓", "✓")], { padding: "64px 48px", maxWidth: "900px" }, { padding: "32px 20px" });
+        }
+      },
+    ]
+  },
+  {
+    id: "proof", name: "Social Proof", desc: "Boost credibility", items: [
+      {
+        name: "Testimonials", build: () => Box("Reviews", [H("Loved by thousands", 36, { textAlign: "center" }), Row("Review Cards", [1, 2, 3].map((i) =>
+          Box("Review", [Stars(5), T("“Short, specific quote about a real result.”", { color: "#111827" }), T("Customer " + i, { fontSize: "14px", fontWeight: "600" })], { flex: "1", padding: "24px", border: "1px solid #e5e7eb", borderRadius: "12px", gap: "10px" })), { gap: "20px" })], { padding: "64px 48px" }, { padding: "32px 20px" })
+      },
+    ]
+  },
+  {
+    id: "guarantees", name: "Guarantees", desc: "Reduce risk", items: [
+      {
+        name: "Guarantee strip", build: () => Row("Guarantees", [["🛡️", "30-day guarantee"], ["↩️", "Free returns"], ["🔒", "Secure checkout"]].map(([i, t]) =>
+          Row("Item", [node("icon", "Icon", { text: i }, { fontSize: "28px" }), T(t, { fontWeight: "600", color: "#111827" })], { flex: "1", alignItems: "center", justifyContent: "center", gap: "12px" }, { flexDirection: "row" })), { padding: "32px 48px", background: "#f3f4f6" }, { padding: "20px", gap: "12px" })
+      },
+    ]
+  },
+  {
+    id: "faqs", name: "FAQs", desc: "Remove Objections", items: [
+      { name: "FAQ list", build: () => Box("FAQs", [H("Frequently asked questions", 36, { textAlign: "center" }), faq("How long does shipping take?", "Orders ship within 24 hours and arrive in 3–5 business days."), faq("What is your return policy?", "Return any item within 30 days for a full refund."), faq("Is it safe for everyday use?", "Yes. Add your real answer here.")], { padding: "64px 48px", maxWidth: "820px" }, { padding: "32px 20px" }) },
+    ]
+  },
+  {
+    id: "collections", name: "Collections", desc: "Show options", items: [
+      { name: "Collection grid", build: () => Box("Collections", [H("Shop by category", 36, { textAlign: "center" }), grid("Collection Grid", 3, ["Indoor", "Outdoor", "Gifts"].map((t) => Box("Collection", [Img(ph(600, 600, t), { height: "auto", aspectRatio: "1 / 1" }), H(t, 20, { textAlign: "center" }, {}, "h3")], { gap: "10px" })))], { padding: "64px 48px" }, { padding: "32px 20px" }) },
+    ]
+  },
+  {
+    id: "howto", name: "How to & Education", desc: "Guide and inform", items: [
+      {
+        name: "3 steps", build: () => Box("How it works", [H("How it works", 36, { textAlign: "center" }), Row("Steps", ["Order", "Unbox", "Enjoy"].map((t, i) =>
+          Box("Step", [node("circle", "Step Number", { text: String(i + 1) }, { width: "48px", height: "48px", borderRadius: "9999px", background: "#111827", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "700" }), H(t, 22, {}, {}, "h3"), T("One short line explaining this step.")], { flex: "1", gap: "10px" })), { gap: "24px" })], { padding: "64px 48px" }, { padding: "32px 20px" })
+      },
+    ]
+  },
+  {
+    id: "about", name: "About & Story", desc: "Build connection", items: [
+      { name: "Founder story", build: () => Row("About", [Img(ph(700, 700, "Founder"), { flex: "1", height: "420px" }), Box("Story", [H("Why we started", 36), T("Tell the honest story of how and why this brand began. Keep it personal and specific.")], { flex: "1", justifyContent: "center" })], { padding: "64px 48px", gap: "48px", alignItems: "center" }, { padding: "32px 20px", gap: "24px" }) },
+    ]
+  },
+  {
+    id: "listicle", name: "Listicle", desc: "Inform and engage", items: [
+      { name: "Reasons list", build: () => Box("Listicle", [H("5 reasons to switch", 36), node("list", "List", { items: ["Reason one", "Reason two", "Reason three", "Reason four", "Reason five"] }, { listStyle: "decimal", paddingLeft: "24px", color: "#374151", lineHeight: "2", fontSize: "18px" })], { padding: "64px 48px", maxWidth: "820px" }, { padding: "32px 20px" }) },
+    ]
+  },
 ];
 
 /* --------------------------- tree helpers -------------------------- */
@@ -409,6 +450,7 @@ function Render({ n, device, isPageSection = false }) {
     role: p.role || undefined,
     "aria-label": p.ariaLabel || undefined,
     "data-node": n.id,
+    "data-page-section": isPageSection ? "true" : undefined,
     onClick,
     draggable: isPageSection && !c.preview,
     onDragStart: isPageSection && !c.preview ? (e) => {
@@ -621,36 +663,65 @@ const SearchBox = ({ value, onChange, placeholder }) => (
 function SectionsPanel({ onAdd, onDragStateChange }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(null);
+  const [hovered, setHovered] = useState(null);
+  const [flyout, setFlyout] = useState(null);
+  const hoverTimer = useRef(null);
   const list = SECTIONS.filter((s) => (s.name + s.desc + s.items.map((i) => i.name).join(" ")).toLowerCase().includes(q.toLowerCase()));
+  const showFlyout = (section, element) => {
+    clearTimeout(hoverTimer.current);
+    const bounds = element.getBoundingClientRect();
+    const height = Math.min(88 + section.items.length * 52, window.innerHeight - 24);
+    setHovered(section.id);
+    setFlyout({
+      section,
+      left: bounds.right + 6,
+      top: Math.max(12, Math.min(bounds.top, window.innerHeight - height - 12)),
+    });
+  };
+  const deferFlyoutClose = () => {
+    clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => {
+      if (open !== hovered) setHovered(null);
+      setFlyout(null);
+    }, 120);
+  };
+  useEffect(() => () => clearTimeout(hoverTimer.current), []);
   return (
     <>
-      <SearchBox value={q} onChange={setQ} placeholder="Search sections…" />
-      <div className="mt-2 space-y-1 overflow-y-auto pr-1" style={{ maxHeight: "calc(100vh - 230px)" }}>
+      <SearchBox value={q} onChange={(value) => { setQ(value); setHovered(null); setFlyout(null); }} placeholder="Search sections…" />
+      <div className="mt-2 min-h-0 flex-1 space-y-1 overflow-x-hidden overflow-y-auto pr-1">
         {list.map((s) => (
-          <div key={s.id}>
-            <button onClick={() => setOpen(open === s.id ? null : s.id)} className="flex w-full items-center justify-between rounded-lg p-2 text-left hover:bg-gray-50">
+          <div key={s.id} onMouseEnter={(e) => showFlyout(s, e.currentTarget)} onMouseLeave={deferFlyoutClose}>
+            <button onFocus={(e) => showFlyout(s, e.currentTarget)} onClick={() => setOpen(open === s.id ? null : s.id)} className="flex w-full items-center justify-between rounded-lg p-2 text-left hover:bg-gray-50">
               <span><span className="block text-[13px] font-semibold text-gray-900">{s.name}</span><span className="block text-xs text-gray-500">{s.desc}</span></span>
-              <span className="text-gray-400"><Ico n={open === s.id || q ? "down" : "right"} size={14} /></span>
+              <span className="text-gray-400"><Ico n={open === s.id || hovered === s.id ? "down" : "right"} size={14} /></span>
             </button>
-            {(open === s.id || q) && (
-              <div className="mb-1 ml-2 space-y-1 border-l border-gray-100 pl-2">
-                {s.items.map((it, index) => (
-                  <button key={it.name} draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData("text/x-section", `${s.id}:${index}`);
-                      e.dataTransfer.effectAllowed = "copy";
-                      onDragStateChange(true);
-                    }}
-                    onDragEnd={() => onDragStateChange(false)}
-                    onClick={() => onAdd(it.build())}
-                    className="block w-full rounded-md border border-gray-200 px-2 py-2 text-left text-xs text-gray-700 hover:border-blue-400 hover:bg-blue-50">+ {it.name}</button>
-                ))}
-              </div>
-            )}
           </div>
         ))}
         {!list.length && <p className="p-2 text-xs text-gray-500">No sections found.</p>}
       </div>
+      {flyout && createPortal(
+        <div
+          className="fixed z-[100] w-[220px] space-y-2 overflow-y-auto rounded-xl border border-gray-100 bg-white p-2 shadow-xl"
+          style={{ left: flyout.left, top: flyout.top, maxHeight: "calc(100vh - 24px)" }}
+          onMouseEnter={() => clearTimeout(hoverTimer.current)}
+          onMouseLeave={deferFlyoutClose}
+        >
+          <div className="px-1 pb-1 text-xs font-semibold text-gray-500">{flyout.section.name}</div>
+          {flyout.section.items.map((it, index) => (
+            <button key={it.name} draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData("text/x-section", `${flyout.section.id}:${index}`);
+                e.dataTransfer.effectAllowed = "copy";
+                onDragStateChange(true);
+              }}
+              onDragEnd={() => onDragStateChange(false)}
+              onClick={() => onAdd(it.build())}
+              className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-3 text-left text-xs font-medium text-gray-700 transition-colors hover:border-blue-400 hover:bg-blue-50">+ {it.name}</button>
+          ))}
+        </div>,
+        document.body
+      )}
     </>
   );
 }
@@ -661,7 +732,7 @@ function ComponentsPanel({ onAdd, onDragStateChange }) {
     <>
       <SearchBox value={q} onChange={setQ} placeholder="Search components…" />
       <p className="mt-2 text-[11px] text-gray-500">Click to add, or drag onto the canvas.</p>
-      <div className="mt-2 grid grid-cols-2 gap-2 overflow-y-auto pr-1" style={{ maxHeight: "calc(100vh - 250px)" }}>
+      <div className="mt-2 grid min-h-0 flex-1 grid-cols-2 content-start gap-2 overflow-y-auto pr-1">
         {list.map((c) => (
           <button key={c.key} draggable
             onDragStart={(e) => { e.dataTransfer.setData("text/x-comp", c.key); e.dataTransfer.effectAllowed = "copy"; onDragStateChange(true); }}
@@ -704,7 +775,7 @@ function AssetsPanel({ assets, setAssets, onUse }) {
         <Inp value={url} onChange={setUrl} placeholder="Paste image URL" />
         <button onClick={addUrl} className="rounded-md bg-gray-900 px-2 text-xs text-white">Add</button>
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2 overflow-y-auto pr-1" style={{ maxHeight: "calc(100vh - 280px)" }}>
+      <div className="mt-2 grid min-h-0 flex-1 grid-cols-2 content-start gap-2 overflow-y-auto pr-1">
         {list.map((a) => (
           <button key={a.id} draggable
             onDragStart={(e) => { e.dataTransfer.setData("text/x-asset", a.id); e.dataTransfer.effectAllowed = "copy"; }}
@@ -803,7 +874,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
   };
 
   return (
-    <div className="pointer-events-auto absolute right-3 top-[88px] w-[300px] overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-black/5" style={{ maxHeight: "calc(100vh - 150px)" }}>
+    <div className="pointer-events-auto absolute right-3 top-[88px] bottom-3 flex w-[300px] flex-col overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-black/5">
       <div className="px-4 pt-3">
         <div className="flex items-center justify-between">
           <span className="text-[13px] font-semibold capitalize text-gray-900">{n.type} <span className="font-normal text-gray-400">· {n.name}</span></span>
@@ -816,7 +887,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
         </div>
       </div>
 
-      <div className="hide-scrollbar overflow-y-auto px-4 pb-4" style={{ maxHeight: "calc(100vh - 230px)" }}>
+      <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-4">
         {tab === "design" && (
           <>
             <Section title="States">
@@ -835,29 +906,29 @@ function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
 
             <Section title="Size">
               {!isPage && (<>
-              <Field label="Width">
-                <div className="flex gap-1">
-                  <div className="w-[96px]"><Seg value={wMode} options={[{ value: "fill", label: "Fill" }, { value: "fit", label: "Fit" }, { value: "fixed", label: "Px" }]}
-                    onChange={(m) => set("width", m === "fill" ? "100%" : m === "fit" ? "fit-content" : /^\d/.test(cur.width || "") ? cur.width : "300px")} /></div>
-                  <Inp value={cur.width} onChange={(v) => set("width", v)} placeholder="auto" />
-                </div>
-              </Field>
-              <Field label="Height">
-                <div className="flex gap-1">
-                  <div className="w-[96px]"><Seg value={hMode} options={[{ value: "fill", label: "Fill" }, { value: "fit", label: "Fit" }, { value: "fixed", label: "Px" }]}
-                    onChange={(m) => set("height", m === "fill" ? "100%" : m === "fit" ? "auto" : /^\d/.test(cur.height || "") ? cur.height : "300px")} /></div>
-                  <Inp value={cur.height} onChange={(v) => set("height", v)} placeholder="auto" />
-                </div>
-              </Field>
+                <Field label="Width">
+                  <div className="flex gap-1">
+                    <div className="w-[96px]"><Seg value={wMode} options={[{ value: "fill", label: "Fill" }, { value: "fit", label: "Fit" }, { value: "fixed", label: "Px" }]}
+                      onChange={(m) => set("width", m === "fill" ? "100%" : m === "fit" ? "fit-content" : /^\d/.test(cur.width || "") ? cur.width : "300px")} /></div>
+                    <Inp value={cur.width} onChange={(v) => set("width", v)} placeholder="auto" />
+                  </div>
+                </Field>
+                <Field label="Height">
+                  <div className="flex gap-1">
+                    <div className="w-[96px]"><Seg value={hMode} options={[{ value: "fill", label: "Fill" }, { value: "fit", label: "Fit" }, { value: "fixed", label: "Px" }]}
+                      onChange={(m) => set("height", m === "fill" ? "100%" : m === "fit" ? "auto" : /^\d/.test(cur.height || "") ? cur.height : "300px")} /></div>
+                    <Inp value={cur.height} onChange={(v) => set("height", v)} placeholder="auto" />
+                  </div>
+                </Field>
               </>)}
               <Field label="Max width"><Inp value={cur.maxWidth} onChange={(v) => set("maxWidth", v)} placeholder="none" /></Field>
               <Field label="Min height"><Inp value={cur.minHeight} onChange={(v) => set("minHeight", v)} placeholder="0" /></Field>
               {!isPage && (<>
-              <Field label="Flex"><Inp value={cur.flex} onChange={(v) => set("flex", v)} placeholder="e.g. 1" /></Field>
-              <Field label="Ratio"><Inp value={cur.aspectRatio} onChange={(v) => set("aspectRatio", v)} placeholder="e.g. 16 / 9" /></Field>
-              <Field label="Align">
-                <Seg value={alignNow} options={[{ value: "left", label: "Left" }, { value: "center", label: "Center" }, { value: "right", label: "Right" }]} onChange={setAlign} />
-              </Field>
+                <Field label="Flex"><Inp value={cur.flex} onChange={(v) => set("flex", v)} placeholder="e.g. 1" /></Field>
+                <Field label="Ratio"><Inp value={cur.aspectRatio} onChange={(v) => set("aspectRatio", v)} placeholder="e.g. 16 / 9" /></Field>
+                <Field label="Align">
+                  <Seg value={alignNow} options={[{ value: "left", label: "Left" }, { value: "center", label: "Center" }, { value: "right", label: "Right" }]} onChange={setAlign} />
+                </Field>
               </>)}
             </Section>
 
@@ -1406,6 +1477,31 @@ export default function Editor() {
     setSelId(nn.id);
   };
   const addSection = (nn) => addNode(nn, null);
+  const addSectionAtDrop = (nn, e) => {
+    const target = document.elementFromPoint(e.clientX, e.clientY);
+    const pageFrame = target?.closest(".rp-frame");
+    const sections = pageFrame ? [...pageFrame.querySelectorAll('[data-page-section="true"]')] : [];
+    const targetSection = target?.closest('[data-page-section="true"]');
+    let index = page.children.length;
+
+    if (targetSection) {
+      const targetIndex = page.children.findIndex((child) => child.id === targetSection.dataset.node);
+      const bounds = targetSection.getBoundingClientRect();
+      if (targetIndex >= 0) index = targetIndex + (e.clientY >= bounds.top + bounds.height / 2 ? 1 : 0);
+    } else if (sections.length) {
+      const next = sections.find((section) => {
+        const bounds = section.getBoundingClientRect();
+        return e.clientY < bounds.top + bounds.height / 2;
+      });
+      if (next) {
+        const nextIndex = page.children.findIndex((child) => child.id === next.dataset.node);
+        if (nextIndex >= 0) index = nextIndex;
+      }
+    }
+
+    update((p) => ({ ...p, children: insertInto(p.children, null, nn, index) }));
+    setSelId(nn.id);
+  };
   const useAsset = (a) => {
     if (selNode && selNode.type === "image") api.setProps({ src: a.src });
     else { const nn = Img(a.src, { height: "auto" }); nn.props.alt = a.name; addAfterSelection(nn); }
@@ -1475,7 +1571,7 @@ export default function Editor() {
     if (sectionKey) {
       const [sectionId, rawIndex] = sectionKey.split(":");
       const item = SECTIONS.find((section) => section.id === sectionId)?.items[Number(rawIndex)];
-      if (item) addSection(item.build());
+      if (item) addSectionAtDrop(item.build(), e);
       setDraggingComponent(false);
       return;
     }
@@ -1696,7 +1792,7 @@ export default function Editor() {
       </div>
 
       {/* left rail + panel */}
-      <div className="absolute left-3 top-[76px] flex gap-2" onClick={(e) => e.stopPropagation()}>
+      <div className="absolute left-3 top-[76px] bottom-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
         <div className="flex h-fit flex-col gap-1 rounded-xl bg-white p-1.5 shadow-md ring-1 ring-black/5">
           {railBtn("sections", "sections", "Sections")}
           {railBtn("components", "plus", "Components")}
@@ -1704,7 +1800,7 @@ export default function Editor() {
           {railBtn("assets", "image", "Assets")}
         </div>
         {leftOpen && (
-          <div className="w-[260px] rounded-xl bg-white p-3 shadow-md ring-1 ring-black/5" style={{ maxHeight: "calc(100vh - 150px)" }}>
+          <div className="flex h-full w-[260px] flex-col overflow-hidden rounded-xl bg-white p-3 shadow-md ring-1 ring-black/5">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm font-semibold capitalize">{leftTab}</span>
               <button onClick={() => setLeftOpen(false)} className="text-gray-400 hover:text-gray-700"><Ico n="left" size={16} /></button>
@@ -1712,7 +1808,7 @@ export default function Editor() {
             {leftTab === "sections" && <SectionsPanel onAdd={addSection} onDragStateChange={setDraggingComponent} />}
             {leftTab === "components" && <ComponentsPanel onAdd={addAfterSelection} onDragStateChange={setDraggingComponent} />}
             {leftTab === "layers" && (
-              <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 210px)" }}>
+              <div className="min-h-0 flex-1 overflow-y-auto">
                 <button onClick={() => select(PAGE_ID)} className={`mb-1 flex w-full items-center gap-1 rounded-md px-1 py-1 text-left text-xs font-medium ${selId === PAGE_ID ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`}><Ico n="page" size={14} />Page</button>
                 {page.children.map((n) => <LayerItem key={n.id} n={n} depth={1} api={api} selectedId={selId} />)}
                 {!page.children.length && <p className="p-2 text-xs text-gray-500">Nothing here yet.</p>}
