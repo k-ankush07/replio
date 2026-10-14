@@ -479,6 +479,12 @@ function Render({ n, device, isPageSection = false }) {
         c.dropNode(e, n.id);
         return;
       }
+      if (e.dataTransfer.types.includes("text/x-comp")) {
+        e.preventDefault();
+        e.stopPropagation();
+        c.dropComponentAt(e, n.id);
+        return;
+      }
       if (e.dataTransfer.types.includes("text/x-asset")) c.dropAsset(e, n.id);
     },
     onMouseEnter: () => setHov(true),
@@ -513,6 +519,12 @@ function Render({ n, device, isPageSection = false }) {
               e.stopPropagation();
               c.dropNode(e, n.id);
             }
+            return;
+          }
+          if (e.dataTransfer.types.includes("text/x-comp")) {
+            e.preventDefault();
+            e.stopPropagation();
+            c.dropComponentAt(e, n.id);
             return;
           }
           e.stopPropagation();
@@ -1476,6 +1488,39 @@ export default function Editor() {
     update((p) => ({ ...p, children: insertInto(p.children, parent, nn, idx) }));
     setSelId(nn.id);
   };
+  const addComponentAtDrop = (nn, e, fallbackTargetId) => {
+    const element = document.elementFromPoint(e.clientX, e.clientY);
+    const targetElement = element?.closest("[data-node]");
+    const targetId = targetElement?.dataset.node;
+    const targetNode = targetId ? findNode(page.children, targetId) : null;
+
+    if (targetNode?.type === "container" && targetId === fallbackTargetId && targetElement === e.target) {
+      addNode(nn, targetNode.id);
+      return;
+    }
+
+    const parentId = targetNode ? findParentId(page.children, targetNode.id) ?? null : null;
+    const siblings = parentId ? findNode(page.children, parentId)?.children : page.children;
+    let index = siblings?.length ?? page.children.length;
+
+    if (targetNode && targetElement) {
+      const targetIndex = siblings?.findIndex((child) => child.id === targetNode.id) ?? -1;
+      const bounds = targetElement.getBoundingClientRect();
+      if (targetIndex >= 0) index = targetIndex + (e.clientY >= bounds.top + bounds.height / 2 ? 1 : 0);
+    } else {
+      const frame = element?.closest(".rp-frame");
+      const pageSections = frame ? [...frame.querySelectorAll('[data-page-section="true"]')] : [];
+      const next = pageSections.find((section) => {
+        const bounds = section.getBoundingClientRect();
+        return e.clientY < bounds.top + bounds.height / 2;
+      });
+      const nextIndex = next ? page.children.findIndex((child) => child.id === next.dataset.node) : -1;
+      if (nextIndex >= 0) index = nextIndex;
+    }
+
+    update((p) => ({ ...p, children: insertInto(p.children, parentId, nn, index) }));
+    setSelId(nn.id);
+  };
   const addSection = (nn) => addNode(nn, null);
   const addSectionAtDrop = (nn, e) => {
     const target = document.elementFromPoint(e.clientX, e.clientY);
@@ -1579,7 +1624,11 @@ export default function Editor() {
     if (assetId) { dropAsset(e, parentId); setDraggingComponent(false); return; }
     const key = e.dataTransfer.getData("text/x-comp");
     const def = COMPONENTS.find((c) => c.key === key);
-    if (def) addNode(def.build(), parentId);
+    if (def) {
+      addComponentAtDrop(def.build(), e, parentId);
+      setDraggingComponent(false);
+      return;
+    }
     setDraggingComponent(false);
   };
 
@@ -1645,6 +1694,12 @@ export default function Editor() {
   const ctx = {
     preview: false, selectedId: selId, activeDevice, stateTab, select, drop, dropAsset,
     dropTarget, draggingSection,
+    dropComponentAt: (e, targetId) => {
+      const key = e.dataTransfer.getData("text/x-comp");
+      const def = COMPONENTS.find((component) => component.key === key);
+      if (def) addComponentAtDrop(def.build(), e, targetId);
+      setDraggingComponent(false);
+    },
     startSectionDrag: (bounds, x, y) => {
       setDraggingSection(true);
       setSectionDragOutline({
