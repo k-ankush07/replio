@@ -372,6 +372,7 @@ function Render({ n, device, isPageSection = false }) {
   const st = { ...resolveStyle(n, device, hoverOn) };
   const p = n.props;
   const empty = n.type === "container" && n.children.length === 0;
+  if (isPageSection && !c.preview && c.draggingSection) st.cursor = "grabbing";
 
   if (st.minWidth == null) st.minWidth = "0";
   if (c.preview) {
@@ -385,9 +386,6 @@ function Render({ n, device, isPageSection = false }) {
   if (n.type === "image" && st.maxWidth == null) st.maxWidth = "100%"; // images never overflow their container on small screens
   if (!c.preview) {
     if (isSel) { st.outline = "2px solid #2563eb"; st.outlineOffset = "-2px"; }
-    else if (isPageSection && c.dropTarget?.id === n.id) {
-      st.boxShadow = c.dropTarget.position === "before" ? "inset 0 4px #2563eb" : "inset 0 -4px #2563eb";
-    }
     else if (hov) { st.outline = "1px solid #93c5fd"; st.outlineOffset = "-1px"; }
     else if (empty) st.outline = "1px dashed #cbd5e1";
     if (empty && !st.minHeight) st.minHeight = "56px";
@@ -416,8 +414,14 @@ function Render({ n, device, isPageSection = false }) {
     onDragStart: isPageSection && !c.preview ? (e) => {
       e.dataTransfer.setData("text/x-node", n.id);
       e.dataTransfer.effectAllowed = "move";
+      const bounds = e.currentTarget.getBoundingClientRect();
+      c.startSectionDrag(bounds, e.clientX, e.clientY);
+      const dragImage = document.createElement("canvas");
+      dragImage.width = 1;
+      dragImage.height = 1;
+      e.dataTransfer.setDragImage(dragImage, 0, 0);
     } : undefined,
-    onDragEnd: isPageSection && !c.preview ? c.clearDropTarget : undefined,
+    onDragEnd: isPageSection && !c.preview ? c.endSectionDrag : undefined,
     onDragOver: (e) => {
       if (c.preview) return;
       if (isPageSection && e.dataTransfer.types.includes("text/x-node")) {
@@ -812,7 +816,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
         </div>
       </div>
 
-      <div className="overflow-y-auto px-4 pb-4" style={{ maxHeight: "calc(100vh - 230px)" }}>
+      <div className="hide-scrollbar overflow-y-auto px-4 pb-4" style={{ maxHeight: "calc(100vh - 230px)" }}>
         {tab === "design" && (
           <>
             <Section title="States">
@@ -1127,6 +1131,8 @@ export default function Editor() {
   const [widths, setWidths] = useState({ desktop: 1440, tablet: 810, mobile: 393 });
   const [assets, setAssets] = useState([]);
   const [draggingComponent, setDraggingComponent] = useState(false);
+  const [draggingSection, setDraggingSection] = useState(false);
+  const [sectionDragOutline, setSectionDragOutline] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
   const [pop, setPop] = useState(null); // settings | publish | previewMenu | nameEdit
   const [preview, setPreview] = useState(null);
@@ -1153,18 +1159,53 @@ export default function Editor() {
   const drag = useRef(null);
   const justPanned = useRef(false);
   const justZoomed = useRef(false);
+  const wheelZoom = useRef({ frame: 0, target: null, x: 0, y: 0, lastTime: 0 });
   const view = useRef({ zoom, pan });
   view.current = { zoom, pan };
   const s = zoom / 100;
 
-  const zoomAt = (z2, cx, cy) => {
+  const applyZoomAt = (z2, cx, cy) => {
     const { zoom: z1, pan: p } = view.current;
     z2 = Math.min(400, Math.max(10, z2));
     const r = z2 / z1;
-    setPan({ x: cx - (cx - p.x) * r, y: cy - (cy - p.y) * r });
+    const nextPan = { x: cx - (cx - p.x) * r, y: cy - (cy - p.y) * r };
+    view.current = { zoom: z2, pan: nextPan };
+    setPan(nextPan);
     setZoom(z2);
   };
+  const cancelWheelZoom = () => {
+    if (wheelZoom.current.frame) cancelAnimationFrame(wheelZoom.current.frame);
+    wheelZoom.current = { frame: 0, target: null, x: 0, y: 0, lastTime: 0 };
+  };
+  const zoomAt = (z2, cx, cy) => {
+    cancelWheelZoom();
+    applyZoomAt(z2, cx, cy);
+  };
+  const animateWheelZoom = (time) => {
+    const animation = wheelZoom.current;
+    if (animation.target === null) return;
+    const elapsed = animation.lastTime ? Math.min(time - animation.lastTime, 50) : 16;
+    animation.lastTime = time;
+    const current = view.current.zoom;
+    const difference = animation.target - current;
+    if (Math.abs(difference) < 0.05) {
+      applyZoomAt(animation.target, animation.x, animation.y);
+      wheelZoom.current = { frame: 0, target: null, x: 0, y: 0, lastTime: 0 };
+      return;
+    }
+    applyZoomAt(current + difference * (1 - Math.exp(-elapsed / 70)), animation.x, animation.y);
+    animation.frame = requestAnimationFrame(animateWheelZoom);
+  };
+  const queueWheelZoom = (deltaY, cx, cy) => {
+    const animation = wheelZoom.current;
+    const base = animation.frame ? animation.target : view.current.zoom;
+    animation.target = Math.min(400, Math.max(10, base * Math.exp(-deltaY * 0.002)));
+    animation.x = cx;
+    animation.y = cy;
+    if (!animation.frame) animation.frame = requestAnimationFrame(animateWheelZoom);
+  };
   const fit = () => {
+    cancelWheelZoom();
     const left = leftOpen ? 390 : 110;
     const vis = Object.keys(DEVICES).filter((d) => show[d]);
     const total = vis.reduce((a, d) => a + widths[d], 0);
@@ -1204,7 +1245,8 @@ export default function Editor() {
       if (zooming) {
         justZoomed.current = true;
         setTimeout(() => { justZoomed.current = false; }, 0);
-        zoomAt(view.current.zoom * Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY);
+        const deltaY = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientHeight : 1);
+        queueWheelZoom(deltaY, e.clientX, e.clientY);
       } else {
         const horiz = e.shiftKey && !e.deltaX;
         setPan((p) => ({ x: p.x - (horiz ? e.deltaY : e.deltaX), y: p.y - (horiz ? 0 : e.deltaY) }));
@@ -1213,6 +1255,7 @@ export default function Editor() {
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, [space]);
+  useEffect(() => () => cancelWheelZoom(), []);
 
   /* drag to pan */
   useEffect(() => {
@@ -1397,8 +1440,16 @@ export default function Editor() {
   const dragOverNode = (e, targetId) => {
     e.preventDefault();
     e.stopPropagation();
-    const { top, height } = e.currentTarget.getBoundingClientRect();
-    setDropTarget({ id: targetId, position: e.clientY < top + height / 2 ? "before" : "after" });
+    const bounds = e.currentTarget.getBoundingClientRect();
+    setSectionDragOutline((outline) => outline ? {
+      ...outline,
+      left: outline.startLeft + e.clientX - outline.startX,
+      top: outline.startTop + e.clientY - outline.startY,
+    } : outline);
+    setDropTarget({
+      id: targetId,
+      position: e.clientY < bounds.top + bounds.height / 2 ? "before" : "after",
+    });
   };
   const dropNode = (e, targetId) => {
     const sourceId = e.dataTransfer.getData("text/x-node");
@@ -1497,7 +1548,16 @@ export default function Editor() {
 
   const ctx = {
     preview: false, selectedId: selId, activeDevice, stateTab, select, drop, dropAsset,
-    dropTarget, dragOverNode, dropNode, clearDropTarget: () => setDropTarget(null),
+    dropTarget, draggingSection,
+    startSectionDrag: (bounds, x, y) => {
+      setDraggingSection(true);
+      setSectionDragOutline({
+        left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height,
+        startLeft: bounds.left, startTop: bounds.top, startX: x, startY: y,
+      });
+    },
+    endSectionDrag: () => { setDraggingSection(false); setSectionDragOutline(null); setDropTarget(null); },
+    dragOverNode, dropNode,
   };
   const visible = Object.keys(DEVICES).filter((d) => show[d]);
 
@@ -1517,11 +1577,18 @@ export default function Editor() {
           backgroundImage: "radial-gradient(#d4d4d8 1px, transparent 1px)",
           backgroundSize: `${16 * s}px ${16 * s}px`,
           backgroundPosition: `${pan.x}px ${pan.y}px`,
-          cursor: panning ? "grabbing" : space ? "grab" : "default",
+          cursor: panning || draggingSection ? "grabbing" : space ? "grab" : "default",
         }}
         onMouseDown={onCanvasDown}
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes("text/x-comp") || e.dataTransfer.types.includes("text/x-asset") || e.dataTransfer.types.includes("text/x-section") || e.dataTransfer.types.includes("text/x-node")) e.preventDefault();
+          if (e.dataTransfer.types.includes("text/x-node")) {
+            setSectionDragOutline((outline) => outline ? {
+              ...outline,
+              left: outline.startLeft + e.clientX - outline.startX,
+              top: outline.startTop + e.clientY - outline.startY,
+            } : outline);
+          }
         }}
         onDrop={(e) => { drop(e, null); setDraggingComponent(false); }}
         onClickCapture={preventPanSelection}
@@ -1582,6 +1649,19 @@ export default function Editor() {
           )}
         </div>
       </div>
+
+      {sectionDragOutline && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed z-30 border-2 border-blue-500"
+          style={{
+            left: sectionDragOutline.left,
+            top: sectionDragOutline.top,
+            width: sectionDragOutline.width,
+            height: sectionDragOutline.height,
+          }}
+        />
+      )}
 
       {/* page card */}
       <div className="absolute left-3 top-3 flex h-[52px] w-[300px] items-center gap-2 rounded-xl bg-white px-3 shadow-md ring-1 ring-black/5" onClick={(e) => e.stopPropagation()}>
