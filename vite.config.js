@@ -6,7 +6,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   server: {
     allowedHosts: [
-      'feels-clips-listings-where.trycloudflare.com',
+      'execute-null-orchestra-link.trycloudflare.com',
     ],
   },
   plugins: [
