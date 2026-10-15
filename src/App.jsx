@@ -451,6 +451,10 @@ function Render({ n, device, isPageSection = false }) {
     "data-node": n.id,
     "data-page-section": isPageSection ? "true" : undefined,
     onClick,
+    onDoubleClick: c.preview || !["text", "heading", "button", "icon", "image"].includes(n.type) ? undefined : (e) => {
+      e.stopPropagation();
+      c.editNode(n, device, e.currentTarget);
+    },
     draggable: isPageSection && !c.preview,
     onDragStart: isPageSection && !c.preview ? (e) => {
       e.dataTransfer.setData("text/x-node", n.id);
@@ -558,8 +562,8 @@ const Field = ({ label, children }) => (
     <div className="min-w-0 flex-1">{children}</div>
   </div>
 );
-const Inp = ({ value, onChange, placeholder, type = "text" }) => (
-  <input type={type} value={value ?? ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)}
+const Inp = ({ value, onChange, placeholder, type = "text", autoFocus = false }) => (
+  <input type={type} value={value ?? ""} placeholder={placeholder} autoFocus={autoFocus} onChange={(e) => onChange(e.target.value)}
     className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500" />
 );
 const Sel = ({ value, options, onChange }) => (
@@ -567,8 +571,8 @@ const Sel = ({ value, options, onChange }) => (
     {options.map((o) => <option key={o} value={o}>{o || "—"}</option>)}
   </select>
 );
-const Area = ({ value, onChange, rows = 3 }) => (
-  <textarea rows={rows} value={value ?? ""} onChange={(e) => onChange(e.target.value)}
+const Area = ({ value, onChange, rows = 3, autoFocus = false }) => (
+  <textarea rows={rows} value={value ?? ""} autoFocus={autoFocus} onChange={(e) => onChange(e.target.value)}
     className="w-full resize-y rounded-md border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500" />
 );
 const Color = ({ value, onChange }) => (
@@ -829,8 +833,7 @@ const gapOf = (st, which) => {
 };
 const SIDE_KEYS = ["top", "right", "bottom", "left"];
 
-function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
-  const [tab, setTab] = useState("design");
+function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }) {
   const fileRef = useRef(null);
   const editKey = stateTab === "hover" ? "hover" : DEVICES[device].key;
   const cur = resolveStyle(n, device, stateTab === "hover");
@@ -1082,7 +1085,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
             {n.type === "container" && <Field label="HTML tag"><Sel value={p.tag || "div"} options={["div", "section", "header", "footer", "main", "nav", "article", "aside"]} onChange={(v) => api.setProps({ tag: v })} /></Field>}
             {n.type === "heading" && <Field label="HTML tag"><Sel value={p.tag || "h2"} options={["h1", "h2", "h3", "h4", "h5", "h6"]} onChange={(v) => api.setProps({ tag: v })} /></Field>}
             {["text", "heading", "button", "icon", "circle"].includes(n.type) && (
-              <div><span className="mb-1 block text-xs text-gray-500">Content</span><Area value={p.text} onChange={(v) => api.setProps({ text: v })} /></div>
+              <div><span className="mb-1 block text-xs text-gray-500">Content</span><Area autoFocus value={p.text} onChange={(v) => api.setProps({ text: v })} /></div>
             )}
             {n.type === "list" && (
               <div><span className="mb-1 block text-xs text-gray-500">Items (one per line)</span><Area rows={5} value={(p.items || []).join("\n")} onChange={(v) => api.setProps({ items: v.split("\n") })} /></div>
@@ -1090,7 +1093,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, api }) {
             {n.type === "stars" && <Field label="Rating"><Sel value={String(p.rating ?? 5)} options={["0", "1", "2", "3", "4", "5"]} onChange={(v) => api.setProps({ rating: +v })} /></Field>}
             {n.type === "image" && (
               <>
-                <Field label="Image URL"><Inp value={p.src?.startsWith("data:") ? "(uploaded / placeholder)" : p.src} onChange={(v) => api.setProps({ src: v })} /></Field>
+                <Field label="Image URL"><Inp autoFocus value={p.src?.startsWith("data:") ? "(uploaded / placeholder)" : p.src} onChange={(v) => api.setProps({ src: v })} /></Field>
                 <button onClick={() => fileRef.current.click()} className="w-full rounded-md border border-gray-200 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Upload image</button>
                 <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => api.setProps({ src: r.result }); r.readAsDataURL(f); e.target.value = ""; }} />
               </>
@@ -1204,6 +1207,8 @@ export default function Editor() {
   const [selId, setSelId] = useState(null);
   const [activeDevice, setActiveDevice] = useState("desktop");
   const [stateTab, setStateTab] = useState("default");
+  const [panelTab, setPanelTab] = useState("design");
+  const [inlineEdit, setInlineEdit] = useState(null);
   const [leftTab, setLeftTab] = useState("sections");
   const [leftOpen, setLeftOpen] = useState(true);
   const [sectionPreviewsVisible, setSectionPreviewsVisible] = useState(false);
@@ -1431,10 +1436,43 @@ export default function Editor() {
     setDimPop(null);
     if (d) setActiveDevice(d);
     setStateTab("default");
+    setPanelTab("design");
+  };
+  const editNode = (n, d, element) => {
+    const bounds = element.getBoundingClientRect();
+    const width = Math.min(360, window.innerWidth - 24);
+    const left = Math.max(12, Math.min(bounds.left, window.innerWidth - width - 12));
+    const popoverHeight = n.type === "image" ? 190 : 170;
+    const top = bounds.bottom + popoverHeight + 12 < window.innerHeight
+      ? bounds.bottom + 8
+      : Math.max(8, bounds.top - popoverHeight - 8);
+    setSelId(n.id);
+    setActiveDevice(d);
+    setInlineEdit({
+      id: n.id,
+      type: n.type,
+      left,
+      top,
+      width,
+      value: n.type === "image" ? n.props.src || "" : n.props.text || "",
+      alt: n.props.alt || "",
+    });
   };
 
   /* mutations */
   const patchId = (id, fn, key) => update((p) => (id === PAGE_ID ? { ...p, s: fn(pageNodeOf(p)).s } : { ...p, children: mapTree(p.children, id, fn) }), key && id + key);
+  const saveInlineEdit = () => {
+    if (!inlineEdit) return;
+    const { id, type, value, alt } = inlineEdit;
+    const props = type === "image" ? { src: value, alt } : { text: value };
+    patchId(id, (n) => ({ ...n, props: { ...n.props, ...props } }), "inline-content");
+    setInlineEdit(null);
+    setSelId(null);
+  };
+  const closeInlineEdit = () => {
+    setInlineEdit(null);
+    setSelId(null);
+  };
   const setPageBase = (k, v) => update((p) => {
     const base = { ...p.s.base };
     if (v === "" || v == null) delete base[k]; else base[k] = v;
@@ -1474,11 +1512,16 @@ export default function Editor() {
     update((p) => ({ ...p, children: insertInto(p.children, parentId, nn) }));
     setSelId(nn.id);
   };
-  /* click-to-add: empty container -> inside it; otherwise as a NEW sibling right after the selection;
-     nothing selected -> end of page. (Dragging onto a container still nests explicitly.) */
+  /* Click-to-add in a container inserts after its first heading, or at the end if it has none. */
   const addAfterSelection = (nn) => {
     if (!selNode || selNode.id === PAGE_ID) return addNode(nn, null);
-    if (selNode.type === "container" && selNode.children.length === 0) return addNode(nn, selNode.id);
+    if (selNode.type === "container") {
+      const headingIndex = selNode.children.findIndex((child) => child.type === "heading");
+      const index = headingIndex < 0 ? selNode.children.length : headingIndex + 1;
+      update((p) => ({ ...p, children: insertInto(p.children, selNode.id, nn, index) }));
+      setSelId(nn.id);
+      return;
+    }
     const parent = findParentId(page.children, selNode.id) ?? null;
     const list = parent == null ? page.children : findNode(page.children, parent).children;
     const idx = list.findIndex((x) => x.id === selNode.id) + 1;
@@ -1509,6 +1552,29 @@ export default function Editor() {
     }
 
     update((p) => ({ ...p, children: insertInto(p.children, null, nn, index) }));
+    setSelId(nn.id);
+  };
+  const addComponentAtDrop = (nn, parentId, e) => {
+    if (parentId == null) return addSectionAtDrop(nn, e);
+
+    const parent = findNode(page.children, parentId);
+    const parentElement = document.querySelector(`[data-node="${parentId}"]`);
+    if (!parent || !parentElement) return addNode(nn, parentId);
+
+    const children = [...parentElement.children].filter((child) => child.dataset.node);
+    const style = window.getComputedStyle(parentElement);
+    const horizontal = style.display === "grid" || (style.display === "flex" && style.flexDirection.startsWith("row"));
+    const coordinate = horizontal ? e.clientX : e.clientY;
+    const targetChild = children.find((child) => {
+      const bounds = child.getBoundingClientRect();
+      const middle = horizontal ? bounds.left + bounds.width / 2 : bounds.top + bounds.height / 2;
+      return coordinate < middle;
+    });
+    const index = targetChild
+      ? parent.children.findIndex((child) => child.id === targetChild.dataset.node)
+      : parent.children.length;
+
+    update((p) => ({ ...p, children: insertInto(p.children, parentId, nn, index) }));
     setSelId(nn.id);
   };
   const useAsset = (a) => {
@@ -1587,7 +1653,7 @@ export default function Editor() {
     if (assetId) { dropAsset(e, parentId); return; }
     const key = e.dataTransfer.getData("text/x-comp");
     const def = COMPONENTS.find((c) => c.key === key);
-    if (def) addNode(def.build(), parentId);
+    if (def) addComponentAtDrop(def.build(), parentId, e);
   };
 
   /* keyboard */
@@ -1650,7 +1716,7 @@ export default function Editor() {
   };
 
   const ctx = {
-    preview: false, selectedId: selId, activeDevice, stateTab, select, drop, dropAsset,
+    preview: false, selectedId: selId, activeDevice, stateTab, select, editNode, drop, dropAsset,
     dropTarget, draggingSection,
     startSectionDrag: (bounds, x, y) => {
       setDraggingSection(true);
@@ -1856,9 +1922,44 @@ export default function Editor() {
       </div>
 
       {/* right panel */}
-      {selNode && (
+      {selNode && !inlineEdit && (
         <div className="pointer-events-none absolute inset-0" onClick={(e) => e.stopPropagation()}>
-          <RightPanel key={selNode.id} node={selNode} device={activeDevice} stateTab={stateTab} setStateTab={setStateTab} api={api} />
+          <RightPanel key={selNode.id} node={selNode} device={activeDevice} stateTab={stateTab} setStateTab={setStateTab} tab={panelTab} setTab={setPanelTab} api={api} />
+        </div>
+      )}
+
+      {inlineEdit && (
+        <div
+          className="fixed z-50 rounded-xl bg-white p-3 shadow-xl ring-1 ring-black/10"
+          style={{ left: inlineEdit.left, top: inlineEdit.top, width: inlineEdit.width }}
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") closeInlineEdit();
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) saveInlineEdit();
+          }}
+        >
+          <div className="mb-2 text-xs font-semibold text-gray-700">
+            {inlineEdit.type === "image" ? "Edit image" : "Edit text"}
+          </div>
+          {inlineEdit.type === "image" ? (
+            <div className="space-y-2">
+              <Inp autoFocus value={inlineEdit.value} placeholder="Image URL" onChange={(value) => setInlineEdit((edit) => ({ ...edit, value }))} />
+              <Inp value={inlineEdit.alt} placeholder="Alt text" onChange={(alt) => setInlineEdit((edit) => ({ ...edit, alt }))} />
+            </div>
+          ) : (
+            <Area
+              autoFocus
+              rows={3}
+              value={inlineEdit.value}
+              onChange={(value) => setInlineEdit((edit) => ({ ...edit, value }))}
+            />
+          )}
+          <div className="mt-2 flex justify-end gap-2">
+            <button onClick={closeInlineEdit} className="rounded-md border border-gray-200 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-50">Cancel</button>
+            <button onClick={saveInlineEdit} className="rounded-md bg-gray-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-black">Save</button>
+          </div>
+          <p className="mt-2 text-[10px] text-gray-400">Ctrl+Enter to save · Esc to cancel</p>
         </div>
       )}
 
