@@ -1776,7 +1776,7 @@ export default function Editor() {
           {visible.map((d, i) => {
             const W = widths[d];
             return (
-              <div key={d} data-nopan className="group relative shrink-0" style={{ width: W }} onClick={(e) => e.stopPropagation()}>
+              <div key={d} data-nopan className="group relative shrink-0" style={{ width: Math.max(W, 175 / s) }} onClick={(e) => e.stopPropagation()}>
                 {/* header: always screen-size, whatever the zoom */}
                 <div style={{ width: W, height: 58 / s }}>
                   <div className="relative flex items-center gap-2 rounded-lg bg-white px-3 shadow-sm ring-1 ring-black/5"
