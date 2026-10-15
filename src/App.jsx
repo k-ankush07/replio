@@ -1209,6 +1209,7 @@ export default function Editor() {
   const [stateTab, setStateTab] = useState("default");
   const [panelTab, setPanelTab] = useState("design");
   const [inlineEdit, setInlineEdit] = useState(null);
+  const inlineEditRef = useRef(null);
   const [leftTab, setLeftTab] = useState("sections");
   const [leftOpen, setLeftOpen] = useState(true);
   const [sectionPreviewsVisible, setSectionPreviewsVisible] = useState(false);
@@ -1738,7 +1739,13 @@ export default function Editor() {
   );
 
   return (
-    <div className="fixed inset-0 overflow-hidden bg-[#fafafa] font-sans text-gray-900" onClick={() => { setPop(null); setDimPop(null); }}>
+    <div
+      className="fixed inset-0 overflow-hidden bg-[#fafafa] font-sans text-gray-900"
+      onClick={() => { setPop(null); setDimPop(null); }}
+      onPointerDownCapture={(e) => {
+        if (inlineEdit && !inlineEditRef.current?.contains(e.target)) saveInlineEdit();
+      }}
+    >
       {/* canvas (infinite, pannable) */}
       <div ref={canvasRef} className="absolute inset-0 overflow-hidden"
         style={{
@@ -1930,6 +1937,7 @@ export default function Editor() {
 
       {inlineEdit && (
         <div
+          ref={inlineEditRef}
           className="fixed z-50 rounded-xl bg-white p-3 shadow-xl ring-1 ring-black/10"
           style={{ left: inlineEdit.left, top: inlineEdit.top, width: inlineEdit.width }}
           onClick={(e) => e.stopPropagation()}
