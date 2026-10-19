@@ -470,6 +470,10 @@ function Render({ n, device, isPageSection = false }) {
     },
     draggable: isPageSection && !c.preview,
     onDragStart: isPageSection && !c.preview ? (e) => {
+      if (e.target !== e.currentTarget) {
+        e.preventDefault();
+        return;
+      }
       e.dataTransfer.setData("text/x-node", n.id);
       e.dataTransfer.effectAllowed = "move";
       const bounds = e.currentTarget.getBoundingClientRect();
@@ -507,8 +511,16 @@ function Render({ n, device, isPageSection = false }) {
       rows={1}
       value={c.inlineEdit.value}
       aria-label="Edit text"
-      className="box-border block w-full min-w-0 resize-none overflow-hidden whitespace-pre-wrap break-words rounded border border-blue-400 bg-white px-1 py-0.5 outline-none"
-      style={{ color: "inherit", font: "inherit", lineHeight: "inherit" }}
+      className="box-border block w-full min-w-0 resize-none overflow-hidden whitespace-pre-wrap break-words rounded border border-blue-400 bg-transparent px-1 py-0.5 outline-none"
+      style={{
+        color: "inherit",
+        font: "inherit",
+        lineHeight: "inherit",
+        textAlign: st.textAlign || "inherit",
+        letterSpacing: st.letterSpacing || "inherit",
+        textTransform: st.textTransform || "inherit",
+        backgroundColor: "transparent",
+      }}
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
       onChange={(e) => {
@@ -1342,7 +1354,8 @@ export default function Editor() {
     setDimPop({ kind, d, x: r.left, y: r.bottom + 8 });
   };
   const onCanvasDown = (e) => {
-    const onBg = !e.target.closest("[data-nopan]");
+    const target = e.target instanceof Element ? e.target : null;
+    const onBg = !target?.closest("[data-nopan], [data-node], input, textarea, select, button, a, [contenteditable='true']");
     if (!(e.button === 1 || (e.button === 0 && (onBg || space)))) return;
     e.preventDefault();
     document.activeElement?.blur?.(); // preventDefault stops the browser doing this itself

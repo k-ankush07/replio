@@ -6,7 +6,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   server: {
     allowedHosts: [
-      'fantastic-bunny-scoring-subaru.trycloudflare.com',
+      'escape-filtering-anna-telephone.trycloudflare.com',
     ],
   },
   plugins: [
