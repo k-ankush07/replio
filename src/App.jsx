@@ -7,7 +7,6 @@ import {
   WrapText, X,
 } from "lucide-react";
 
-
 const uid = () => Math.random().toString(36).slice(2, 9);
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const kebab = (s) => s.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase());
@@ -28,6 +27,7 @@ const DEVICES = {
   tablet: { label: "Tablet", key: "tablet" },
   mobile: { label: "Mobile", key: "mobile" },
 };
+
 const DEVICE_PRESETS = {
   desktop: [["Full HD", 1920], ["Macbook Pro 16\"", 1728], ["Macbook Pro 14\"", 1512], ["Default", 1440], ["Chromebook", 1366], ["Macbook Air", 1280]],
   tablet: [["iPad Mini", 768], ["iPad", 810], ["Surface Pro 7", 912], ["iPad Pro", 1024]],
@@ -548,7 +548,9 @@ function Render({ n, device, isPageSection = false }) {
     }
     case "text": return <p {...common}>{inlineInput || p.text}</p>;
     case "heading": return React.createElement(p.tag || "h2", common, inlineInput || p.text);
-    case "button": return <button type="button" {...common}>{inlineInput || p.text}</button>;
+    case "button": return c.thumbnail
+      ? <div style={st} className={p.className || undefined}>{p.text}</div>
+      : <button type="button" {...common}>{inlineInput || p.text}</button>;
     case "icon": return <span {...common}>{inlineInput || p.text}</span>;
     default: {
       const dropProps = c.preview ? {} : {
@@ -729,7 +731,7 @@ function SectionThumbnail({ item }) {
   return (
     <div className="rp-frame pointer-events-none relative overflow-hidden bg-white" style={{ height }}>
       <div ref={contentRef} className="absolute left-0 top-0 w-[1000px] origin-top-left" style={{ transform: "scale(0.2)" }}>
-        <Ctx.Provider value={{ preview: true }}>
+        <Ctx.Provider value={{ preview: true, thumbnail: true }}>
           <Render n={sample} device="desktop" />
         </Ctx.Provider>
       </div>
@@ -771,17 +773,23 @@ function SectionsPanel({ onAdd, onPreviewVisibilityChange }) {
           <div className="mb-2 px-1 text-xs font-semibold text-gray-800">{activeSection.name}</div>
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
             {activeSection.items.map((it, index) => (
-                <button key={it.name} draggable
+                <div key={it.name} role="button" tabIndex={0} draggable
                   onDragStart={(e) => {
                     e.dataTransfer.setData("text/x-section", `${activeSection.id}:${index}`);
                     e.dataTransfer.effectAllowed = "copy";
                   }}
                   onClick={() => onAdd(it.build())}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onAdd(it.build());
+                    }
+                  }}
                   aria-label={`Add ${it.name}`}
                   title={it.name}
                   className="block w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-50 text-left transition-colors hover:border-blue-400 hover:bg-blue-50">
                   <SectionThumbnail item={it} />
-                </button>
+                </div>
             ))}
           </div>
         </div>
