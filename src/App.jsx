@@ -406,6 +406,18 @@ const Ctx = createContext({ preview: false });
 function Render({ n, device, isPageSection = false }) {
   const c = useContext(Ctx);
   const [hov, setHov] = useState(false);
+  const isInlineEditing = !c.preview
+    && c.inlineEdit?.id === n.id
+    && c.inlineEdit.type !== "image"
+    && c.activeDevice === device;
+  useEffect(() => {
+    if (!isInlineEditing || !c.inlineEditRef.current) return;
+    const input = c.inlineEditRef.current;
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+    input.style.height = "auto";
+    input.style.height = `${input.scrollHeight}px`;
+  }, [isInlineEditing]);
   if (n.hide[device]) return null;
 
   const isSel = !c.preview && c.selectedId === n.id && c.activeDevice === device;
@@ -452,7 +464,7 @@ function Render({ n, device, isPageSection = false }) {
     "data-node": n.id,
     "data-page-section": isPageSection ? "true" : undefined,
     onClick,
-    onDoubleClick: c.preview || !["text", "heading", "button", "icon", "image"].includes(n.type) ? undefined : (e) => {
+    onDoubleClick: c.preview || isInlineEditing || !["text", "heading", "button", "icon", "image"].includes(n.type) ? undefined : (e) => {
       e.stopPropagation();
       c.editNode(n, device, e.currentTarget);
     },
@@ -488,6 +500,31 @@ function Render({ n, device, isPageSection = false }) {
     onMouseEnter: () => setHov(true),
     onMouseLeave: () => setHov(false),
   };
+  const inlineInput = isInlineEditing ? (
+    <textarea
+      ref={c.inlineEditRef}
+      autoFocus
+      rows={1}
+      value={c.inlineEdit.value}
+      aria-label="Edit text"
+      className="box-border block w-full min-w-0 resize-none overflow-hidden whitespace-pre-wrap break-words rounded border border-blue-400 bg-white px-1 py-0.5 outline-none"
+      style={{ color: "inherit", font: "inherit", lineHeight: "inherit" }}
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onChange={(e) => {
+        e.currentTarget.style.height = "auto";
+        e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+        c.changeInlineText(n.id, e.currentTarget.value);
+      }}
+      onBlur={c.saveInlineEdit}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          c.saveInlineEdit();
+        }
+      }}
+    />
+  ) : null;
 
   switch (n.type) {
     case "image": return <img {...common} src={p.src} alt={p.alt || ""} draggable={false} />;
@@ -497,10 +534,10 @@ function Render({ n, device, isPageSection = false }) {
       const r = Math.round(Math.max(0, Math.min(5, +p.rating || 0)));
       return <div {...common}>{"★".repeat(r) + "☆".repeat(5 - r)}</div>;
     }
-    case "text": return <p {...common}>{p.text}</p>;
-    case "heading": return React.createElement(p.tag || "h2", common, p.text);
-    case "button": return <button type="button" {...common}>{p.text}</button>;
-    case "icon": return <span {...common}>{p.text}</span>;
+    case "text": return <p {...common}>{inlineInput || p.text}</p>;
+    case "heading": return React.createElement(p.tag || "h2", common, inlineInput || p.text);
+    case "button": return <button type="button" {...common}>{inlineInput || p.text}</button>;
+    case "icon": return <span {...common}>{inlineInput || p.text}</span>;
     default: {
       const dropProps = c.preview ? {} : {
         onDragOver: (e) => {
@@ -1718,7 +1755,12 @@ export default function Editor() {
   };
 
   const ctx = {
-    preview: false, selectedId: selId, activeDevice, stateTab, select, editNode, drop, dropAsset,
+    preview: false, selectedId: selId, activeDevice, stateTab, inlineEdit, inlineEditRef,
+    changeInlineText: (id, value) => {
+      setInlineEdit((edit) => edit?.id === id ? { ...edit, value } : edit);
+      patchId(id, (n) => n.props.text === value ? n : ({ ...n, props: { ...n.props, text: value } }), "inline-content");
+    },
+    saveInlineEdit, select, editNode, drop, dropAsset,
     dropTarget, draggingSection,
     startSectionDrag: (bounds, x, y) => {
       setDraggingSection(true);
@@ -1936,7 +1978,7 @@ export default function Editor() {
         </div>
       )}
 
-      {inlineEdit && (
+      {inlineEdit?.type === "image" && (
         <div
           ref={inlineEditRef}
           className="fixed z-50 rounded-xl bg-white p-3 shadow-xl ring-1 ring-black/10"
@@ -1948,22 +1990,11 @@ export default function Editor() {
             if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) saveInlineEdit();
           }}
         >
-          <div className="mb-2 text-xs font-semibold text-gray-700">
-            {inlineEdit.type === "image" ? "Edit image" : "Edit text"}
+          <div className="mb-2 text-xs font-semibold text-gray-700">Edit image</div>
+          <div className="space-y-2">
+            <Inp autoFocus value={inlineEdit.value} placeholder="Image URL" onChange={(value) => setInlineEdit((edit) => ({ ...edit, value }))} />
+            <Inp value={inlineEdit.alt} placeholder="Alt text" onChange={(alt) => setInlineEdit((edit) => ({ ...edit, alt }))} />
           </div>
-          {inlineEdit.type === "image" ? (
-            <div className="space-y-2">
-              <Inp autoFocus value={inlineEdit.value} placeholder="Image URL" onChange={(value) => setInlineEdit((edit) => ({ ...edit, value }))} />
-              <Inp value={inlineEdit.alt} placeholder="Alt text" onChange={(alt) => setInlineEdit((edit) => ({ ...edit, alt }))} />
-            </div>
-          ) : (
-            <Area
-              autoFocus
-              rows={3}
-              value={inlineEdit.value}
-              onChange={(value) => setInlineEdit((edit) => ({ ...edit, value }))}
-            />
-          )}
           <div className="mt-2 flex justify-end gap-2">
             <button onClick={closeInlineEdit} className="rounded-md border border-gray-200 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-50">Cancel</button>
             <button onClick={saveInlineEdit} className="rounded-md bg-gray-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-black">Save</button>
