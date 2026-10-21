@@ -8,6 +8,11 @@ const splitPercents = (n) => {
   return arr;
 };
 const fmt = (p) => `${Number.isInteger(p) ? p : p.toFixed(1)}%`;
+const pctsOf = (info) =>
+  info.groups ? (info.percents?.length === info.groups ? info.percents : splitPercents(info.groups)) : [];
+const activesOf = (info) => Array.from({ length: info.groups || 0 }, (_, j) => info.pagesActive?.[j] ?? true);
+// A funnel is Active when at least one page is Active (or when it has no split)
+const funnelActive = (info) => (info.groups > 0 ? activesOf(info).some(Boolean) : true);
 
 const STATS = [
   ["SHOWN", "7,651"],
@@ -52,6 +57,12 @@ const GripIcon = (p) => (
 const CopyIcon = (p) => (
   <Icon {...p} sw={2}><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h9" /></Icon>
 );
+const TrashIcon = (p) => (
+  <Icon {...p} sw={2}>
+    <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6M10 11v6M14 11v6" />
+  </Icon>
+);
+const CloseIcon = (p) => (<Icon {...p} sw={2.2}><path d="M6 6l12 12M18 6 6 18" /></Icon>);
 const FlagIcon = (p) => (<Icon {...p}><path d="M5 21V4M5 4h11l-2 4 2 4H5" /></Icon>);
 const ExternalIcon = ({ size = 9 }) => (
   <Icon size={size} sw={2}><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></Icon>
@@ -59,6 +70,19 @@ const ExternalIcon = ({ size = 9 }) => (
 
 /* ---------- nodes ---------- */
 const card = "rounded-xl border border-[#2b2928] bg-[#1c1b1a] shadow-[0_10px_30px_rgba(0,0,0,0.45)]";
+
+const StatusBadge = ({ active }) => (
+  <span
+    className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[8px] ${
+      active
+        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+        : "border-neutral-500/40 bg-neutral-500/10 text-neutral-400"
+    }`}
+  >
+    <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-emerald-500" : "bg-neutral-500"}`} />
+    {active ? "Active" : "Inactive"}
+  </span>
+);
 
 const StoreNode = () => (
   <div className={`${card} w-[150px] shrink-0 px-3.5 py-3.5`}>
@@ -71,6 +95,7 @@ const StoreNode = () => (
 );
 
 const TriggerNode = ({ info, onClick, onCopy, onDragStart, dragging }) => {
+  const active = funnelActive(info);
   const cls = `${card} w-full px-3.5 py-3 text-left`;
   const tool = "flex h-6 w-6 items-center justify-center rounded-md border border-[#3a3837] bg-[#1c1b1a] text-neutral-300 hover:border-[#b0614a] hover:text-white";
   const body = (
@@ -78,11 +103,9 @@ const TriggerNode = ({ info, onClick, onCopy, onDragStart, dragging }) => {
       <div className="flex items-center gap-1.5">
         <BoltIcon />
         <span className="text-[8px] tracking-wide text-neutral-300">TRIGGER</span>
-        <span className="ml-0.5 inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] text-emerald-400">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Active
-        </span>
+        <span className="ml-0.5"><StatusBadge active={active} /></span>
       </div>
-      <div className="mt-2 truncate text-[12px] font-bold text-neutral-100">{info.name}</div>
+      <div className={`mt-2 truncate text-[12px] font-bold ${active ? "text-neutral-100" : "text-neutral-400"}`}>{info.name}</div>
       <div className="mt-1.5 flex items-center gap-1 text-[8px] text-neutral-400">
         {info.sub}
         {info.badge && <span className="rounded bg-[#2d2b2a] px-1 py-0.5 text-[8px] text-neutral-300">{info.badge}</span>}
@@ -118,29 +141,36 @@ const TriggerNode = ({ info, onClick, onCopy, onDragStart, dragging }) => {
   );
 };
 
-const CheckoutCard = () => (
-  <div className={`${card} w-[300px] shrink-0 p-3`}>
+const CheckoutCard = ({ active = true, selected = false, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title="Click to configure page"
+    className={`${card} block w-[300px] shrink-0 cursor-pointer p-3 text-left transition ${
+      selected ? "ring-1 ring-[#b0614a]" : "hover:ring-1 hover:ring-[#b0614a]/50"
+    }`}
+  >
     <div className="mb-2 flex items-center justify-between border-b border-[#2b2928] pb-2">
-      <div className="flex items-center gap-2">
+      <div className={`flex items-center gap-2 ${active ? "" : "opacity-60"}`}>
         <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#262322] text-[#c0694d]"><CartIcon size={13} /></div>
         <div>
           <div className="text-[8px] text-neutral-400">Checkout page</div>
           <div className="text-[10px] font-medium text-neutral-100">pomence.co...</div>
         </div>
       </div>
-      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] text-emerald-400">
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Active
-      </span>
+      <StatusBadge active={active} />
     </div>
-    <div className="grid grid-cols-3 gap-1.5">
+    <div className={`grid grid-cols-3 gap-1.5 ${active ? "" : "opacity-50"}`}>
       {STATS.map(([label, value, green]) => (
         <div key={label} className="rounded-md border border-[#2b2928] bg-[#1d1c1b] py-1.5 text-center">
           <div className="text-[7px] tracking-wide text-neutral-400">{label}</div>
-          <div className={`mt-0.5 text-[12px] font-bold ${green ? "text-[#4ade80]" : "text-neutral-100"}`}>{value}</div>
+          <div className={`mt-0.5 text-[12px] font-bold ${active && green ? "text-[#4ade80]" : "text-neutral-100"}`}>
+            {active ? value : "-"}
+          </div>
         </div>
       ))}
     </div>
-  </div>
+  </button>
 );
 
 /* ---------- pipeline ---------- */
@@ -171,7 +201,6 @@ const TRUNK = 56;
 const PCT_W = 112;
 const LEFT = FAN_W + PCT_W;
 const CARD_W = 300;
-const STEP = 16;
 
 const chevron = (x, y) => `M${x - 6} ${y - 5} L${x} ${y} L${x - 6} ${y + 5}`;
 
@@ -198,7 +227,6 @@ function SplitWires({ n, h, percents }) {
     }
     arrows.push(chevron(LEFT, cy));
   });
-
 
   const pillX = FAN_W + PCT_W / 2;
   return (
@@ -290,10 +318,11 @@ function layoutMerge(h, pts, colW) {
 }
 
 /* ---------- one trigger + its split cards ---------- */
-function Block({ info, groups, onEdit, onAdd, onCopy, onDragStart, dragY, dragging, target }) {
+function Block({ info, groups, onEdit, onAdd, onCopy, onDragStart, onPage, selectedPage, dragY, dragging, target }) {
   const [rowsEl, setRowsEl] = useState(null);
   const [h, setH] = useState(0);
-  const percents = groups ? splitPercents(groups) : [];
+  const percents = pctsOf(info);
+  const actives = activesOf(info);
 
   useEffect(() => {
     if (!rowsEl) return;
@@ -316,7 +345,7 @@ function Block({ info, groups, onEdit, onAdd, onCopy, onDragStart, dragY, draggi
           <div ref={setRowsEl} className="flex flex-col">
             {percents.map((_, i) => (
               <div key={i} className="py-2">
-                <CheckoutCard />
+                <CheckoutCard active={actives[i]} selected={selectedPage === i} onClick={() => onPage(i)} />
               </div>
             ))}
           </div>
@@ -336,16 +365,119 @@ function Block({ info, groups, onEdit, onAdd, onCopy, onDragStart, dragY, draggi
   );
 }
 
-/* ---------- add funnel popup ---------- */
+/* ---------- checkout page side panel ---------- */
+function PagePanel({ funnel, page, onToggle, onRemove, onClose }) {
+  const percent = pctsOf(funnel)[page];
+  const active = activesOf(funnel)[page];
+
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed right-6 top-20 z-40 w-[300px] rounded-xl border border-[#2b2928] bg-[#1c1b1a] p-4 shadow-2xl">
+      <div className="flex items-center justify-between border-b border-[#2b2928] pb-2.5">
+        <span className="text-[12px] font-bold text-neutral-100">Checkout page</span>
+        <button type="button" onClick={onClose} title="Close" className="flex h-6 w-6 items-center justify-center rounded-md text-neutral-400 hover:bg-[#2b2928] hover:text-white">
+          <CloseIcon size={13} />
+        </button>
+      </div>
+
+      <div className="mt-3 flex items-center gap-2">
+        <span className="truncate text-[13px] font-bold text-neutral-100">{funnel.name} · Page {page + 1}</span>
+        <StatusBadge active={active} />
+      </div>
+      <p className="mt-2 text-[10px] leading-relaxed text-neutral-400">
+        How this page serves inside the funnel: its share of the split and whether it takes traffic at all.
+      </p>
+
+      <div className="mt-3 rounded-lg border border-[#2b2928] bg-[#1d1c1b] p-3">
+        <div className="text-[9px] tracking-wide text-neutral-400">TRAFFIC ALLOCATION</div>
+        <div className={`mt-1 text-[18px] font-bold ${active ? "text-neutral-100" : "text-neutral-500"}`}>{fmt(percent)}</div>
+        <div className="mt-1 text-[9px] text-neutral-500">Change the split from Edit funnel (click the trigger).</div>
+      </div>
+
+      <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-[#2b2928] bg-[#1d1c1b] p-3">
+        <div>
+          <div className="text-[11px] font-medium text-neutral-100">Takes traffic</div>
+          <div className="mt-0.5 text-[9px] leading-snug text-neutral-400">
+            An inactive page keeps its place in the split but serves nothing.
+          </div>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={active}
+          onClick={() => onToggle(!active)}
+          className={`relative h-5 w-9 shrink-0 rounded-full transition ${active ? "bg-emerald-500" : "bg-[#3a3837]"}`}
+        >
+          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${active ? "left-[18px]" : "left-0.5"}`} />
+        </button>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={onRemove}
+          className="flex items-center gap-1.5 rounded-md border border-red-500/40 px-3 py-1.5 text-[10px] text-red-400 hover:bg-red-500/10"
+        >
+          <TrashIcon size={12} />
+          Remove from funnel
+        </button>
+        <span className="text-[9px] leading-snug text-neutral-500">Detaches it; the page survives.</span>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- add / edit funnel popup ---------- */
 const PRODUCTS = ["Classic Tee", "Hoodie", "Sneakers", "Baseball Cap", "Backpack", "Water Bottle", "Sunglasses", "Wrist Watch", "Leather Wallet", "Phone Case"];
 
-function FunnelModal({ initial, onSave, onClose }) {
+function FunnelModal({ initial, onSave, onDelete, onClose }) {
+  const initN = initial?.groups > 0 ? initial.groups : 1;
   const [name, setName] = useState(initial?.name ?? "");
   const [picked, setPicked] = useState(initial?.picked ?? []);
-  const [n, setN] = useState(initial?.groups > 0 ? initial.groups : 1);
+  const [n, setN] = useState(initN);
+  const [pcts, setPcts] = useState(
+    initial?.percents?.length === initN && initN > 1 ? initial.percents : splitPercents(initN)
+  );
+  const [confirmDel, setConfirmDel] = useState(false);
   const all = picked.length === PRODUCTS.length;
-  const ok = name.trim() !== "" && picked.length > 0;
+  const total = Math.round(pcts.reduce((a, b) => a + b, 0) * 10) / 10;
+  const totalOk = n === 1 || total === 100;
+  const ok = name.trim() !== "" && picked.length > 0 && totalOk;
   const toggle = (p) => setPicked((s) => (s.includes(p) ? s.filter((x) => x !== p) : [...s, p]));
+  const changeN = (v) => {
+    setN(v);
+    setPcts(splitPercents(v));
+  };
+
+  // Changing one group auto-adjusts the others so the total always stays 100
+  const setPct = (i, v) => {
+    const val = Math.min(100, Math.max(0, Math.round(v * 10) / 10));
+    setPcts((p) => {
+      if (p.length === 1) return [100];
+      const rest = Math.round((100 - val) * 10) / 10;
+      const others = p.map((x, k) => k).filter((k) => k !== i);
+      const oldSum = others.reduce((a, k) => a + p[k], 0);
+      const next = [...p];
+      next[i] = val;
+      let used = 0;
+      others.forEach((k, idx) => {
+        if (idx === others.length - 1) {
+          // the last one takes the remainder so the total is exactly 100
+          next[k] = Math.round((rest - used) * 10) / 10;
+        } else {
+          const share = oldSum > 0 ? p[k] / oldSum : 1 / others.length;
+          next[k] = Math.round(rest * share * 10) / 10;
+          used += next[k];
+        }
+      });
+      return next;
+    });
+  };
 
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
@@ -358,6 +490,7 @@ function FunnelModal({ initial, onSave, onClose }) {
       {on && <CheckIcon size={9} />}
     </span>
   );
+  const stepBtn = "flex h-7 w-7 items-center justify-center rounded-md border border-[#3a3837] text-[13px] text-neutral-200 hover:border-[#b0614a]";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -366,7 +499,7 @@ function FunnelModal({ initial, onSave, onClose }) {
         aria-modal="true"
         aria-label={initial ? "Edit checkout funnel" : "Add checkout funnel"}
         onClick={(e) => e.stopPropagation()}
-        className="w-[340px] rounded-xl border border-[#2b2928] bg-[#1c1b1a] p-4 shadow-2xl"
+        className="max-h-[95vh] w-[400px] overflow-y-auto rounded-xl border border-[#2b2928] bg-[#1c1b1a] p-4 shadow-2xl"
       >
         <div className="text-[13px] font-bold text-neutral-100">{initial ? "Edit checkout funnel" : "Add checkout funnel"}</div>
 
@@ -376,7 +509,7 @@ function FunnelModal({ initial, onSave, onClose }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Summer sale funnel"
-          className="mt-1 w-full rounded-md border border-[#3a3837] bg-[#1d1c1b] px-2 py-1.5 text-[11px] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-[#b0614a]"
+          className="mt-1 w-full select-text rounded-md border border-[#3a3837] bg-[#1d1c1b] px-2 py-1.5 text-[11px] text-neutral-100 outline-none placeholder:text-neutral-500 focus:border-[#b0614a]"
         />
 
         <div className="mt-3 flex items-center justify-between">
@@ -401,29 +534,104 @@ function FunnelModal({ initial, onSave, onClose }) {
 
         <div className="mt-3 text-[9px] tracking-wide text-neutral-400">3. SPLIT OPTION</div>
         <div className="mt-1.5 flex items-center gap-2">
-          <button type="button" onClick={() => setN(Math.max(1, n - 1))} className="h-6 w-6 rounded-md border border-[#3a3837] text-[12px] text-neutral-200 hover:border-[#b0614a]">−</button>
-          <div className="w-8 text-center text-[14px] font-bold text-neutral-100">{n}</div>
-          <button type="button" onClick={() => setN(Math.min(8, n + 1))} className="h-6 w-6 rounded-md border border-[#3a3837] text-[12px] text-neutral-200 hover:border-[#b0614a]">+</button>
-          <span className="ml-1 text-[10px] text-neutral-400">{n === 1 ? "No split" : `${n} groups`}</span>
+          <button type="button" onClick={() => changeN(Math.max(1, n - 1))} className={stepBtn}>−</button>
+          <div className="w-8 text-center text-[15px] font-bold text-neutral-100">{n}</div>
+          <button type="button" onClick={() => changeN(Math.min(8, n + 1))} className={stepBtn}>+</button>
+          <span className="ml-1 text-[11px] text-neutral-400">{n === 1 ? "No split" : `${n} groups`}</span>
         </div>
+
         {n > 1 && (
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {splitPercents(n).map((p, i) => (
-              <span key={i} className="rounded-full border border-[#3a3837] px-2 py-0.5 text-[9px] text-neutral-200">Group {i + 1}: {fmt(p)}</span>
-            ))}
-          </div>
+          <>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {pcts.map((p, i) => (
+                <div key={i} className="rounded-lg border border-[#3a3837] bg-[#1d1c1b] px-2.5 py-2">
+                  <div className="text-[11px] font-medium text-neutral-300">Group {i + 1}</div>
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    <button type="button" onClick={() => setPct(i, p - 1)} className={stepBtn}>−</button>
+                    <div className="flex flex-1 items-center justify-center rounded-md border border-[#3a3837] bg-[#161515] px-1 py-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        value={p}
+                        onChange={(e) => setPct(i, parseFloat(e.target.value) || 0)}
+                        className="w-full select-text bg-transparent text-center text-[13px] font-bold text-neutral-100 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      />
+                      <span className="text-[11px] text-neutral-400">%</span>
+                    </div>
+                    <button type="button" onClick={() => setPct(i, p + 1)} className={stepBtn}>+</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 flex items-center justify-between">
+              <button type="button" onClick={() => setPcts(splitPercents(n))} className="text-[10px] text-[#d08b73] hover:underline">
+                Equal split
+              </button>
+              <span className={`text-[11px] font-medium ${totalOk ? "text-emerald-400" : "text-red-400"}`}>
+                Total: {fmt(total)} {totalOk ? "" : "(must be 100%)"}
+              </span>
+            </div>
+          </>
         )}
 
-        <div className="mt-4 flex items-center justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded-md border border-[#3a3837] px-3 py-1.5 text-[10px] text-neutral-300 hover:border-neutral-500">Cancel</button>
-          <button
-            type="button"
-            disabled={!ok}
-            onClick={() => onSave({ name: name.trim(), sub: all ? "All products" : `${picked.length} selected`, groups: n > 1 ? n : 0, picked })}
-            className="rounded-md bg-[#b0614a] px-4 py-1.5 text-[10px] font-medium text-white hover:bg-[#c26f56] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Save
-          </button>
+        <div className="mt-4 flex items-center justify-between gap-2">
+          {/* Delete (edit mode only) */}
+          <div className="flex items-center gap-2">
+            {initial && onDelete && (
+              confirmDel ? (
+                <>
+                  <span className="text-[10px] text-red-300">Delete funnel?</span>
+                  <button
+                    type="button"
+                    onClick={onDelete}
+                    className="rounded-md bg-red-600 px-3 py-1.5 text-[10px] font-medium text-white hover:bg-red-500"
+                  >
+                    Yes, delete
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDel(false)}
+                    className="rounded-md border border-[#3a3837] px-2.5 py-1.5 text-[10px] text-neutral-300 hover:border-neutral-500"
+                  >
+                    No
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDel(true)}
+                  className="flex items-center gap-1.5 rounded-md border border-red-500/40 px-3 py-1.5 text-[10px] text-red-400 hover:bg-red-500/10"
+                >
+                  <TrashIcon size={12} />
+                  Delete
+                </button>
+              )
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onClose} className="rounded-md border border-[#3a3837] px-3 py-1.5 text-[10px] text-neutral-300 hover:border-neutral-500">Cancel</button>
+            <button
+              type="button"
+              disabled={!ok}
+              onClick={() =>
+                onSave({
+                  name: name.trim(),
+                  sub: all ? "All products" : `${picked.length} selected`,
+                  groups: n > 1 ? n : 0,
+                  percents: n > 1 ? pcts : undefined,
+                  // keep the existing active/inactive status when the group count is unchanged
+                  pagesActive: n > 1 && initial?.pagesActive?.length === n ? initial.pagesActive : undefined,
+                  picked,
+                })
+              }
+              className="rounded-md bg-[#b0614a] px-4 py-1.5 text-[10px] font-medium text-white hover:bg-[#c26f56] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Save
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -434,10 +642,47 @@ function FunnelModal({ initial, onSave, onClose }) {
 export default function App() {
   const [funnels, setFunnels] = useState([{ name: "All Products", sub: "Always matches", badge: "Default", groups: 0, locked: true }]);
   const [modal, setModal] = useState(null); // "new" | funnel index | null
+  const [panel, setPanel] = useState(null); // { f: funnelIndex, p: pageIndex } | null
   const [colEl, setColEl] = useState(null);
   const [geo, setGeo] = useState({ h: 0, w: 0, mids: [], pts: [] });
   const ml = layoutMerge(geo.h, geo.pts, geo.w);
-  const setGroups = (i, v) => setFunnels((f) => f.map((x, k) => (k === i ? { ...x, groups: v } : x)));
+
+  // Adding a group: percentages reset to an equal split, the new page starts Active
+  const setGroups = (i, v) =>
+    setFunnels((f) =>
+      f.map((x, k) => (k === i ? { ...x, groups: v, percents: undefined, pagesActive: [...activesOf(x), true].slice(0, v) } : x))
+    );
+  const deleteFunnel = (i) => {
+    setPanel(null);
+    setFunnels((f) => f.filter((x, k) => k !== i || x.locked));
+  };
+  const setPageActive = (fi, pi, v) =>
+    setFunnels((l) =>
+      l.map((x, k) => {
+        if (k !== fi) return x;
+        const arr = activesOf(x);
+        arr[pi] = v;
+        return { ...x, pagesActive: arr };
+      })
+    );
+  const removePage = (fi, pi) => {
+    setPanel(null);
+    setFunnels((l) =>
+      l.map((x, k) => {
+        if (k !== fi) return x;
+        const arr = activesOf(x).filter((_, j) => j !== pi);
+        const g = x.groups - 1;
+        return g < 2
+          ? { ...x, groups: 0, percents: undefined, pagesActive: undefined }
+          : { ...x, groups: g, percents: undefined, pagesActive: arr };
+      })
+    );
+  };
+
+  // Close the side panel as soon as a modal opens
+  useEffect(() => {
+    if (modal !== null) setPanel(null);
+  }, [modal]);
 
   /* ----- Figma-style canvas: Ctrl+scroll zoom, scroll / Space+drag / middle mouse pan ----- */
   const viewRef = useRef(null);
@@ -446,6 +691,7 @@ export default function App() {
   const dragRef = useRef(null);
   const inited = useRef(false);
   const [view, setView] = useState({ x: 0, y: 0, k: 1 });
+  const [ready, setReady] = useState(false); // content stays hidden until the first fit (prevents the blink)
   const [space, setSpace] = useState(false);
   const [drag, setDrag] = useState(false);
 
@@ -471,6 +717,7 @@ export default function App() {
     if (geo.h > 0 && !inited.current) {
       inited.current = true;
       fit();
+      setReady(true);
     }
   }, [geo.h]);
 
@@ -518,12 +765,14 @@ export default function App() {
 
   const [dnd, setDnd] = useState(null); // { i, dy, to } while reordering
   const dndRef = useRef(null);
-  const copyFunnel = (i) =>
+  const copyFunnel = (i) => {
+    setPanel(null);
     setFunnels((l) => {
       const a = [...l];
       a.splice(i + 1, 0, { ...l[i], name: `${l[i].name} copy` });
       return a;
     });
+  };
   const startDrag = (i, e) => {
     if (e.button !== 0) return;
     e.stopPropagation();
@@ -548,13 +797,15 @@ export default function App() {
       const st = dndRef.current;
       dndRef.current = null;
       setDnd(null);
-      if (st && st.to !== st.i)
+      if (st && st.to !== st.i) {
+        setPanel(null);
         setFunnels((l) => {
           const a = [...l];
           const [m] = a.splice(st.i, 1);
           a.splice(st.to, 0, m);
           return a;
         });
+      }
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -599,8 +850,11 @@ export default function App() {
     return () => ro.disconnect();
   }, [colEl, funnels]);
 
+  const panelFunnel = panel ? funnels[panel.f] : null;
+  const panelValid = panelFunnel && panel.p < (panelFunnel.groups || 0);
+
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-[#0f0e0e] text-neutral-100">
+    <div className="relative h-screen w-screen select-none overflow-hidden bg-[#0f0e0e] text-neutral-100">
       <button
         type="button"
         onClick={() => setModal("new")}
@@ -619,34 +873,39 @@ export default function App() {
       >
         <div
           ref={contentRef}
-          style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}
+          style={{
+            transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})`,
+            opacity: ready ? 1 : 0,
+          }}
           className="absolute left-0 top-0 w-max origin-top-left"
         >
-      <div className={`flex items-center p-8 ${space ? "[&_*]:!cursor-grab" : ""}`}>
-        <StoreNode />
-        <FanIn h={geo.h} ys={geo.mids} />
-        <div className="relative flex shrink-0">
-          <div ref={setColEl} className="relative flex shrink-0 flex-col gap-16">
-            {funnels.map((f, i) => (
-              <Block
-                key={i}
-                info={f}
-                groups={f.groups}
-                onEdit={f.locked ? undefined : () => setModal(i)}
-                onAdd={() => setGroups(i, Math.min(8, f.groups + 1))}
-                onCopy={f.locked ? undefined : () => copyFunnel(i)}
-                onDragStart={f.locked ? undefined : (e) => startDrag(i, e)}
-                dragY={dnd?.i === i ? dnd.dy : undefined}
-                dragging={dnd?.i === i}
-                target={!!dnd && dnd.to === i && dnd.i !== i}
-              />
-            ))}
+          <div className={`flex items-center p-8 ${space ? "[&_*]:!cursor-grab" : ""}`}>
+            <StoreNode />
+            <FanIn h={geo.h} ys={geo.mids} />
+            <div className="relative flex shrink-0">
+              <div ref={setColEl} className="relative flex shrink-0 flex-col gap-16">
+                {funnels.map((f, i) => (
+                  <Block
+                    key={i}
+                    info={f}
+                    groups={f.groups}
+                    onEdit={f.locked ? undefined : () => setModal(i)}
+                    onAdd={() => setGroups(i, Math.min(8, f.groups + 1))}
+                    onCopy={f.locked ? undefined : () => copyFunnel(i)}
+                    onDragStart={f.locked ? undefined : (e) => startDrag(i, e)}
+                    onPage={(p) => setPanel({ f: i, p })}
+                    selectedPage={panel?.f === i ? panel.p : -1}
+                    dragY={dnd?.i === i ? dnd.dy : undefined}
+                    dragging={dnd?.i === i}
+                    target={!!dnd && dnd.to === i && dnd.i !== i}
+                  />
+                ))}
+              </div>
+              <div style={{ width: ml.W }} className="shrink-0" />
+              {geo.h > 0 && <Wires w={geo.w + ml.W} h={geo.h} paths={ml.paths} arrows={ml.arrows} className="pointer-events-none absolute left-0 top-0" />}
+            </div>
+            <Pipeline />
           </div>
-          <div style={{ width: ml.W }} className="shrink-0" />
-          {geo.h > 0 && <Wires w={geo.w + ml.W} h={geo.h} paths={ml.paths} arrows={ml.arrows} className="pointer-events-none absolute left-0 top-0" />}
-        </div>
-        <Pipeline />
-      </div>
         </div>
       </div>
 
@@ -660,11 +919,29 @@ export default function App() {
         Scroll to pan · Ctrl + scroll to zoom · Space + drag to move
       </div>
 
+      {panelValid && (
+        <PagePanel
+          funnel={panelFunnel}
+          page={panel.p}
+          onToggle={(v) => setPageActive(panel.f, panel.p, v)}
+          onRemove={() => removePage(panel.f, panel.p)}
+          onClose={() => setPanel(null)}
+        />
+      )}
+
       {modal !== null && (
         <FunnelModal
           key={modal}
           initial={typeof modal === "number" ? funnels[modal] : undefined}
           onClose={() => setModal(null)}
+          onDelete={
+            typeof modal === "number"
+              ? () => {
+                  deleteFunnel(modal);
+                  setModal(null);
+                }
+              : undefined
+          }
           onSave={(f) => {
             setFunnels((list) => (typeof modal === "number" ? list.map((x, k) => (k === modal ? f : x)) : [...list, f]));
             setModal(null);
