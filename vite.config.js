@@ -6,7 +6,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   server: {
     allowedHosts: [
-      'escape-filtering-anna-telephone.trycloudflare.com',
+      'pvc-nuclear-connection-runtime.trycloudflare.com',
     ],
   },
   plugins: [
