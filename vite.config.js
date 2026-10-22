@@ -6,7 +6,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   server: {
     allowedHosts: [
-      'pvc-nuclear-connection-runtime.trycloudflare.com',
+      'thousands-chapel-description-dat.trycloudflare.com',
     ],
   },
   plugins: [
