@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useContext, createContext } from "r
 import {
   ArrowDown, ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Circle,
   Columns2, Copy, Eye, FileText, Grid2X2, Heading1, Heading2, Heading3,
-  Image, Layers3, List, Minus, Monitor, MousePointer2, PanelsTopLeft, Play,
+  Image, Images, Layers3, List, Minus, Monitor, MousePointer2, PanelsTopLeft, Play,
   Plus, Redo2, Search, Settings, Square, Star, Trash2, Type, Undo2, Upload,
   WrapText, X,
 } from "lucide-react";
@@ -43,7 +43,7 @@ const ICONS = {
   upload: Upload, search: Search, close: X, text: Type, heading1: Heading1,
   heading2: Heading2, heading3: Heading3, list: List, rating: Star, container: Square,
   button: MousePointer2, grid: Grid2X2, divider: Minus, icon: Circle, circle: Circle,
-  column: Columns2, page: FileText, heading: Heading1,
+  column: Columns2, page: FileText, heading: Heading1, slider: Images,
 };
 
 const Ico = ({ n, size = 18, ...props }) => {
@@ -94,6 +94,25 @@ const Card = (icon, title, text) =>
 const grid = (name, cols, children, extra = {}) =>
   Box(name, children, { display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: "16px", ...extra }, { gridTemplateColumns: "1fr" });
 
+/* ------------------------------ slider ----------------------------- */
+const SLIDER_DEFAULTS = { fit: "cover", arrows: true, dots: true, loop: true, autoplay: false, interval: 4000, perView: 1, perViewTablet: 1, perViewMobile: 1, gap: 0 };
+/* how many slides are visible at once on a device (1 to 6) */
+const perViewOf = (p, device) => {
+  const raw = device === "mobile" ? p.perViewMobile : device === "tablet" ? p.perViewTablet : p.perView;
+  return Math.max(1, Math.min(6, parseInt(raw, 10) || 1));
+};
+/* "16 / 9" -> 56.25 (padding-top % that reserves the slider height without relying on aspect-ratio) */
+const ratioPct = (r) => {
+  const m = /^\s*([\d.]+)\s*(?:\/\s*([\d.]+))?\s*$/.exec(String(r || "16 / 9"));
+  const w = m ? +m[1] : 16, h = m && m[2] ? +m[2] : m ? 1 : 9;
+  return w > 0 && h > 0 ? (h / w) * 100 : 56.25;
+};
+const newSlide = (i) => ({ src: ph(1200, 675, "Slide " + i), alt: "Slide " + i, caption: "" });
+const buildSlider = () =>
+  node("slider", "Slider", { ...SLIDER_DEFAULTS, slides: [1, 2, 3].map(newSlide) }, {
+    width: "100%", aspectRatio: "16 / 9", borderRadius: "12px",
+  });
+
 /* ---------------------------- components --------------------------- */
 const COMPONENTS = [
   { key: "text", label: "Text", glyph: "text", build: () => T("Write your text here") },
@@ -106,6 +125,7 @@ const COMPONENTS = [
   },
   { key: "starstext", label: "Stars + Text", glyph: "rating", build: () => Row("Stars + Text", [Stars(5), T("4.9 from 2,000+ reviews", { fontSize: "14px" })], { alignItems: "center", gap: "8px" }, { flexDirection: "row" }) },
   { key: "image", label: "Image", glyph: "image", build: () => Img(ph(800, 600), { height: "auto" }) },
+  { key: "slider", label: "Slider", glyph: "slider", build: buildSlider },
   { key: "container", label: "Container", glyph: "container", build: () => Box("Container", [], { padding: "24px", border: "1px dashed #d1d5db", borderRadius: "8px" }) },
   { key: "button", label: "Button", glyph: "button", build: () => Btn("Click me") },
   {
@@ -166,6 +186,16 @@ const SECTIONS = [
             Btn("Add to cart", { width: "100%" }),
           ], { flex: "1", justifyContent: "center" }),
         ], { padding: "48px", gap: "48px" }, { padding: "20px", gap: "24px" })
+      },
+    ]
+  },
+  {
+    id: "gallery", name: "Gallery & Slider", desc: "Show more visuals", items: [
+      {
+        name: "Image slider", build: () => Box("Slider Section", [
+          H("See it in action", 36, { textAlign: "center" }),
+          (() => { const s = buildSlider(); s.s.base.maxWidth = "960px"; s.s.base.margin = "0 auto"; return s; })(),
+        ], { padding: "64px 48px" }, { padding: "32px 20px" })
       },
     ]
   },
@@ -279,12 +309,22 @@ const shift = (list, id, dir) => {
 };
 
 /* make imported / stored data safe to render */
+const fixSlide = (s, i) => ({
+  src: String(s?.src ?? ph(1200, 675, "Slide " + (i + 1))),
+  alt: String(s?.alt ?? ""),
+  caption: String(s?.caption ?? ""),
+});
+const fixProps = (n) => {
+  const props = n.props || {};
+  if (n.type !== "slider") return props;
+  return { ...SLIDER_DEFAULTS, ...props, slides: (Array.isArray(props.slides) ? props.slides : []).map(fixSlide) };
+};
 const fixNode = (n) => ({
   ...n,
   id: n.id || uid(),
   type: n.type || "container",
   name: n.name || n.type || "Layer",
-  props: n.props || {},
+  props: fixProps(n),
   s: { base: {}, tablet: {}, mobile: {}, hover: {}, ...(n.s || {}) },
   hide: n.hide || {},
   children: (Array.isArray(n.children) ? n.children : []).map(fixNode),
@@ -329,23 +369,91 @@ const boxSide = (style, property, side) => {
 
 /* ------------------------------ export ----------------------------- */
 const RESET = "*{box-sizing:border-box}h1,h2,h3,h4,h5,h6,p,ul,hr,figure{margin:0}button{font-family:inherit}";
+
+/* shared by the editor canvas, preview and the exported page */
+const SLIDER_CSS =
+  ".rp-sl-track{position:absolute;inset:0;display:flex;transition:transform .4s ease}" +
+  ".rp-sl-sizer{display:block;width:100%;height:0}" +
+  ".rp-sl-slide{position:relative;box-sizing:border-box;flex:0 0 calc(100% / var(--sl-pv,1));min-width:0;height:100%;padding:0 calc(var(--sl-gap,0px) / 2)}" +
+  ".rp-sl-slide img{display:block;width:100%;height:100%}" +
+  ".rp-sl-cap{position:absolute;left:calc(var(--sl-gap,0px) / 2);right:calc(var(--sl-gap,0px) / 2);bottom:0;padding:36px 20px 40px;color:#fff;font-size:16px;line-height:1.4;background:linear-gradient(transparent,rgba(0,0,0,.6))}" +
+  ".rp-sl-arrow{position:absolute;top:50%;z-index:2;display:flex;align-items:center;justify-content:center;width:40px;height:40px;transform:translateY(-50%);border:none;border-radius:9999px;background:rgba(255,255,255,.88);color:#111827;font-size:22px;line-height:1;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.2)}" +
+  ".rp-sl-arrow:disabled{opacity:.4;cursor:default}" +
+  ".rp-sl-prev{left:12px}.rp-sl-next{right:12px}" +
+  ".rp-sl-dots{position:absolute;left:0;right:0;bottom:12px;z-index:2;display:flex;justify-content:center;gap:8px}" +
+  ".rp-sl-dot{width:10px;height:10px;padding:0;border:none;border-radius:9999px;background:#fff;opacity:.5;cursor:pointer;box-shadow:0 0 0 1px rgba(0,0,0,.15)}" +
+  ".rp-sl-dot[aria-current='true']{opacity:1}" +
+  "@media(prefers-reduced-motion:reduce){.rp-sl-track{transition:none}}";
+
+const FRAME_CSS = ".rp-frame *{box-sizing:border-box}.rp-frame :where(h1,h2,h3,h4,h5,h6,p,ul,hr){margin:0}.rp-frame button{font-family:inherit}" + SLIDER_CSS;
+
+/* tiny dependency-free script for the exported page (ES5 on purpose) */
+const SLIDER_JS = `(function(){
+var reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+document.querySelectorAll("[data-slider]").forEach(function(root){
+var track=root.querySelector(".rp-sl-track");
+if(!track)return;
+var n=track.children.length;
+if(!n)return;
+var dots=root.querySelectorAll(".rp-sl-dot");
+var prev=root.querySelector(".rp-sl-prev"),next=root.querySelector(".rp-sl-next");
+var loop=root.getAttribute("data-loop")==="1";
+var auto=root.getAttribute("data-autoplay")==="1"&&!reduce&&n>1;
+var gap=Math.max(1000,parseInt(root.getAttribute("data-interval"),10)||4000);
+var i=0,timer=null,x0=null;
+function pv(){var v=parseInt(getComputedStyle(root).getPropertyValue("--sl-pv"),10);return v>0?v:1;}
+function show(k){
+var m=Math.max(1,n-pv()+1);
+i=loop?((k%m)+m)%m:Math.max(0,Math.min(m-1,k));
+track.style.transform="translateX(-"+(i*100/pv())+"%)";
+for(var j=0;j<dots.length;j++){dots[j].style.display=j<m?"":"none";dots[j].setAttribute("aria-current",j===i?"true":"false");}
+if(prev){prev.disabled=!loop&&i===0;prev.style.display=m<2?"none":"";}
+if(next){next.disabled=!loop&&i>=m-1;next.style.display=m<2?"none":"";}
+}
+function stop(){if(timer){clearInterval(timer);timer=null;}}
+function start(){stop();if(auto)timer=setInterval(function(){show(i+1);},gap);}
+if(prev)prev.addEventListener("click",function(e){e.stopPropagation();show(i-1);start();});
+if(next)next.addEventListener("click",function(e){e.stopPropagation();show(i+1);start();});
+for(var d=0;d<dots.length;d++)dots[d].addEventListener("click",(function(k){return function(e){e.stopPropagation();show(k);start();};})(d));
+root.addEventListener("mouseenter",stop);
+root.addEventListener("mouseleave",start);
+root.addEventListener("focusin",stop);
+root.addEventListener("focusout",start);
+root.addEventListener("touchstart",function(e){x0=e.touches[0].clientX;stop();},{passive:true});
+root.addEventListener("touchend",function(e){if(x0===null)return;var dx=e.changedTouches[0].clientX-x0;x0=null;if(Math.abs(dx)>40)show(i+(dx<0?1:-1));start();});
+root.addEventListener("keydown",function(e){if(e.key==="ArrowLeft")show(i-1);else if(e.key==="ArrowRight")show(i+1);});
+window.addEventListener("resize",function(){show(i);});
+show(0);start();
+});
+})();`;
+
 const cssText = (o) => Object.entries(o).map(([k, v]) => `${kebab(k)}:${v}`).join(";");
 
 function exportHTML(page) {
-  let base = "", tab = "", mob = "", hov = "", hide = "", usesTw = false;
+  let base = "", tab = "", mob = "", hov = "", hide = "", usesTw = false, usesSlider = false;
   const el = (n) => {
     const cls = "n-" + n.id;
     const p = n.props;
     if (p.className) usesTw = true;
+    const isSlider = n.type === "slider";
+    if (isSlider) usesSlider = true;
     const pre =
       (n.s.base.minWidth == null ? "min-width:0;" : "") +
       (n.type === "text" && !n.s.base.whiteSpace ? "white-space:pre-wrap;" : "") +
       (n.type === "image" && n.s.base.maxWidth == null ? "max-width:100%;" : "") +
+      (isSlider && n.s.base.position == null ? "position:relative;" : "") +
+      (isSlider && n.s.base.overflow == null ? "overflow:hidden;" : "") +
+      (isSlider && n.s.base.height == null && n.s.base.aspectRatio == null ? "aspect-ratio:16/9;" : "") +
       (Object.keys(n.s.hover).length && !n.s.base.transition ? "transition:all .15s ease;" : "");
     base += `.${cls}{${pre}${cssText(n.s.base)}}`;
     if (Object.keys(n.s.tablet).length) tab += `.${cls}{${cssText(n.s.tablet)}}`;
     if (Object.keys(n.s.mobile).length) mob += `.${cls}{${cssText(n.s.mobile)}}`;
     if (Object.keys(n.s.hover).length) hov += `.${cls}:hover{${cssText(n.s.hover)}}`;
+    if (isSlider) {
+      base += `.${cls}{--sl-pv:${perViewOf(p, "desktop")};--sl-gap:${Math.max(0, parseInt(p.gap, 10) || 0)}px}.${cls}>.rp-sl-sizer{padding-top:${ratioPct(n.s.base.aspectRatio)}%}`;
+      tab += `.${cls}{--sl-pv:${perViewOf(p, "tablet")}}` + (n.s.tablet.aspectRatio ? `.${cls}>.rp-sl-sizer{padding-top:${ratioPct(n.s.tablet.aspectRatio)}%}` : "");
+      mob += `.${cls}{--sl-pv:${perViewOf(p, "mobile")}}` + (n.s.mobile.aspectRatio ? `.${cls}>.rp-sl-sizer{padding-top:${ratioPct(n.s.mobile.aspectRatio)}%}` : "");
+    }
     if (n.hide.desktop) hide += `@media(min-width:1025px){.${cls}{display:none!important}}`;
     if (n.hide.tablet) hide += `@media(min-width:481px) and (max-width:1024px){.${cls}{display:none!important}}`;
     if (n.hide.mobile) hide += `@media(max-width:480px){.${cls}{display:none!important}}`;
@@ -367,6 +475,26 @@ function exportHTML(page) {
       case "heading": return `<${p.tag || "h2"}${a}>${esc(p.text)}</${p.tag || "h2"}>`;
       case "button": return `<button${a}>${esc(p.text)}</button>`;
       case "icon": return `<span${a}>${esc(p.text)}</span>`;
+      case "slider": {
+        const slides = Array.isArray(p.slides) ? p.slides : [];
+        const multi = slides.length > 1;
+        const fit = ["cover", "contain", "fill"].includes(p.fit) ? p.fit : "cover";
+        const extra =
+          (p.role ? "" : ' role="region"') +
+          (p.ariaLabel ? "" : ' aria-label="Image slider"') +
+          ' aria-roledescription="carousel" tabindex="0" data-slider' +
+          ` data-loop="${p.loop !== false ? 1 : 0}" data-autoplay="${p.autoplay ? 1 : 0}" data-interval="${Math.max(1000, +p.interval || 4000)}"`;
+        const track = slides.map((s, i) =>
+          `<div class="rp-sl-slide" role="group" aria-roledescription="slide" aria-label="${i + 1} of ${slides.length}"><img src="${esc(s.src)}" alt="${esc(s.alt)}" style="object-fit:${fit}"${i > 0 ? ' loading="lazy"' : ""}>${s.caption ? `<div class="rp-sl-cap">${esc(s.caption)}</div>` : ""}</div>`
+        ).join("");
+        const arrows = multi && p.arrows !== false
+          ? '<button type="button" class="rp-sl-arrow rp-sl-prev" aria-label="Previous slide">‹</button><button type="button" class="rp-sl-arrow rp-sl-next" aria-label="Next slide">›</button>'
+          : "";
+        const dots = multi && p.dots !== false
+          ? `<div class="rp-sl-dots">${slides.map((_, i) => `<button type="button" class="rp-sl-dot" aria-label="Go to slide ${i + 1}" aria-current="${i === 0}"></button>`).join("")}</div>`
+          : "";
+        return `<div${a}${extra}><div class="rp-sl-sizer" aria-hidden="true"></div><div class="rp-sl-track">${track}</div>${arrows}${dots}</div>`;
+      }
       default: { const tag = p.tag || "div"; return `<${tag}${a}>${p.text ? esc(p.text) : ""}${n.children.map(el).join("")}</${tag}>`; }
     }
   };
@@ -384,6 +512,7 @@ function exportHTML(page) {
 <title>${esc(page.title || page.name)}</title>
 ${usesTw ? '<script src="https://cdn.tailwindcss.com"></script>\n' : ""}<style>
 ${RESET}
+${usesSlider ? SLIDER_CSS : ""}
 body{margin:0;background:${ps.base.background || "#ffffff"};font-family:${ps.base.fontFamily || "system-ui,sans-serif"}}
 ${base}
 @media(max-width:1024px){${tab}}
@@ -396,12 +525,104 @@ ${hide}
 <div class="n-page">
 ${body}
 </div>
-</body>
+${usesSlider ? `<script>\n${SLIDER_JS}\n</script>\n` : ""}</body>
 </html>`;
 }
 
 /* ------------------------------ context ---------------------------- */
 const Ctx = createContext({ preview: false });
+
+/* ------------------------------ slider view ------------------------ */
+function SliderView({ n, common, preview, device }) {
+  const p = n.props;
+  const st = common.style;
+  const slides = Array.isArray(p.slides) ? p.slides : [];
+  const count = slides.length;
+  const loop = p.loop !== false;
+  const fit = ["cover", "contain", "fill"].includes(p.fit) ? p.fit : "cover";
+  const pv = perViewOf(p, device);
+  const gap = Math.max(0, parseInt(p.gap, 10) || 0);
+  const positions = Math.max(1, count - pv + 1); // how many places the track can stop at
+  const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const touchX = useRef(null);
+  const current = Math.min(index, positions - 1);
+
+  const step = (dir) => {
+    if (positions < 2) return;
+    setIndex((i) => {
+      const base = Math.min(i, positions - 1);
+      const next = base + dir;
+      return loop ? (next + positions) % positions : Math.max(0, Math.min(positions - 1, next));
+    });
+  };
+  const goTo = (i) => setIndex(Math.max(0, Math.min(positions - 1, i)));
+
+  /* autoplay runs only in Preview (never while editing) */
+  useEffect(() => {
+    if (!preview || !p.autoplay || positions < 2 || paused) return undefined;
+    const timer = setInterval(() => step(1), Math.max(1000, Number(p.interval) || 4000));
+    return () => clearInterval(timer);
+  }, [preview, p.autoplay, p.interval, positions, paused, loop]);
+
+  const swallow = (fn) => (e) => { e.stopPropagation(); fn(); };
+  const multi = positions > 1;
+  const needsSizer = st.height == null || st.height === "auto";
+
+  return (
+    <div
+      {...common}
+      style={{ ...st, "--sl-pv": pv, "--sl-gap": `${gap}px` }}
+      role={p.role || "region"}
+      aria-roledescription="carousel"
+      aria-label={p.ariaLabel || "Image slider"}
+      tabIndex={preview ? 0 : undefined}
+      onMouseEnter={(e) => { common.onMouseEnter(e); setPaused(true); }}
+      onMouseLeave={(e) => { common.onMouseLeave(e); setPaused(false); }}
+      onTouchStart={(e) => { touchX.current = e.touches[0].clientX; setPaused(true); }}
+      onTouchEnd={(e) => {
+        if (touchX.current !== null) {
+          const dx = e.changedTouches[0].clientX - touchX.current;
+          if (Math.abs(dx) > 40) step(dx < 0 ? 1 : -1);
+        }
+        touchX.current = null;
+        setPaused(false);
+      }}
+      onKeyDown={preview ? (e) => {
+        if (e.key === "ArrowLeft") step(-1);
+        else if (e.key === "ArrowRight") step(1);
+      } : undefined}
+    >
+      {needsSizer && <div className="rp-sl-sizer" aria-hidden="true" style={{ paddingTop: `${ratioPct(st.aspectRatio)}%` }} />}
+      <div className="rp-sl-track" style={{ transform: `translateX(-${(current * 100) / pv}%)` }}>
+        {slides.map((s, i) => (
+          <div key={i} className="rp-sl-slide" role="group" aria-roledescription="slide" aria-label={`${i + 1} of ${count}`}>
+            <img src={s.src} alt={s.alt || ""} draggable={false} style={{ objectFit: fit }} />
+            {s.caption ? <div className="rp-sl-cap">{s.caption}</div> : null}
+          </div>
+        ))}
+      </div>
+      {!count && (
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: 13, background: "#f1f5f9" }}>
+          No slides yet. Add slides in the Config tab.
+        </div>
+      )}
+      {multi && p.arrows !== false && (
+        <>
+          <button type="button" className="rp-sl-arrow rp-sl-prev" aria-label="Previous slide" disabled={!loop && current === 0} onClick={swallow(() => step(-1))}>‹</button>
+          <button type="button" className="rp-sl-arrow rp-sl-next" aria-label="Next slide" disabled={!loop && current === positions - 1} onClick={swallow(() => step(1))}>›</button>
+        </>
+      )}
+      {multi && p.dots !== false && (
+        <div className="rp-sl-dots">
+          {Array.from({ length: positions }, (_, i) => (
+            <button key={i} type="button" className="rp-sl-dot" aria-label={`Go to slide ${i + 1}`} aria-current={i === current} onClick={swallow(() => goTo(i))} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ------------------------------ renderer --------------------------- */
 function Render({ n, device, isPageSection = false }) {
@@ -438,6 +659,12 @@ function Render({ n, device, isPageSection = false }) {
   }
   if (n.type === "text" && !st.whiteSpace) st.whiteSpace = "pre-wrap";
   if (n.type === "image" && st.maxWidth == null) st.maxWidth = "100%"; // images never overflow their container on small screens
+  if (n.type === "slider") {
+    if (st.position == null) st.position = "relative";
+    if (st.overflow == null) st.overflow = "hidden";
+    if (st.height == null && st.aspectRatio == null) st.aspectRatio = "16 / 9";
+  }
+  if (isPageSection && !c.preview && st.position == null) st.position = "relative";
   if (!c.preview) {
     if (isSel) { st.outline = "2px solid #2563eb"; st.outlineOffset = "-2px"; }
     else if (hov) { st.outline = "1px solid #93c5fd"; st.outlineOffset = "-1px"; }
@@ -465,26 +692,18 @@ function Render({ n, device, isPageSection = false }) {
     "data-node": n.id,
     "data-page-section": isPageSection ? "true" : undefined,
     onClick,
+    draggable: !c.preview && !isPageSection && !isInlineEditing,
+    onDragStart: !c.preview && !isPageSection ? (e) => {
+      e.stopPropagation();
+      e.dataTransfer.setData("text/x-move", n.id);
+      e.dataTransfer.effectAllowed = "move";
+      c.startMove(n.id);
+    } : undefined,
+    onDragEnd: !c.preview && !isPageSection ? (e) => { e.stopPropagation(); c.endMove(); } : undefined,
     onDoubleClick: c.preview || isInlineEditing || !["text", "heading", "button", "icon", "image"].includes(n.type) ? undefined : (e) => {
       e.stopPropagation();
       c.editNode(n, device, e.currentTarget);
     },
-    draggable: isPageSection && !c.preview,
-    onDragStart: isPageSection && !c.preview ? (e) => {
-      if (e.target !== e.currentTarget) {
-        e.preventDefault();
-        return;
-      }
-      e.dataTransfer.setData("text/x-node", n.id);
-      e.dataTransfer.effectAllowed = "move";
-      const bounds = e.currentTarget.getBoundingClientRect();
-      c.startSectionDrag(bounds, e.clientX, e.clientY);
-      const dragImage = document.createElement("canvas");
-      dragImage.width = 1;
-      dragImage.height = 1;
-      e.dataTransfer.setDragImage(dragImage, 0, 0);
-    } : undefined,
-    onDragEnd: isPageSection && !c.preview ? c.endSectionDrag : undefined,
     onDragOver: (e) => {
       if (c.preview) return;
       if (isPageSection && e.dataTransfer.types.includes("text/x-node")) {
@@ -539,14 +758,47 @@ function Render({ n, device, isPageSection = false }) {
     />
   ) : null;
 
+  /* Only this handle moves a whole section; dragging text, buttons, stars etc. no longer drags the section. */
+  const sectionHandle = isPageSection && !c.preview && n.type === "container" && (hov || isSel) ? (
+    <button
+      key="section-handle"
+      type="button"
+      draggable
+      title="Drag to move this section"
+      aria-label="Drag to move this section"
+      onClick={(e) => e.stopPropagation()}
+      onDragStart={(e) => {
+        e.stopPropagation();
+        const section = e.currentTarget.closest('[data-page-section="true"]');
+        if (!section) { e.preventDefault(); return; }
+        e.dataTransfer.setData("text/x-node", n.id);
+        e.dataTransfer.effectAllowed = "move";
+        c.startSectionDrag(section.getBoundingClientRect(), e.clientX, e.clientY);
+        const dragImage = document.createElement("canvas");
+        dragImage.width = 1;
+        dragImage.height = 1;
+        e.dataTransfer.setDragImage(dragImage, 0, 0);
+      }}
+      onDragEnd={c.endSectionDrag}
+      className="flex items-center gap-1 rounded-bl-md bg-blue-600 px-2 py-1 text-[11px] font-medium text-white"
+      style={{
+        position: "absolute", top: 0, right: 0, zIndex: 25, cursor: "grab", border: "none",
+        transform: `scale(${1 / (c.zoom || 1)})`, transformOrigin: "top right",
+      }}
+    >
+      ⠿ Move section
+    </button>
+  ) : null;
+
   switch (n.type) {
-    case "image": return <img {...common} src={p.src} alt={p.alt || ""} draggable={false} />;
+    case "image": return <img {...common} src={p.src} alt={p.alt || ""} />;
     case "hr": return <hr {...common} />;
     case "list": return <ul {...common}>{(p.items || []).map((t, i) => <li key={i}>{t}</li>)}</ul>;
     case "stars": {
       const r = Math.round(Math.max(0, Math.min(5, +p.rating || 0)));
       return <div {...common}>{"★".repeat(r) + "☆".repeat(5 - r)}</div>;
     }
+    case "slider": return <SliderView n={n} common={common} preview={!!c.preview} device={device} />;
     case "text": return <p {...common}>{inlineInput || p.text}</p>;
     case "heading": return React.createElement(p.tag || "h2", common, inlineInput || p.text);
     case "button": return c.thumbnail
@@ -562,6 +814,7 @@ function Render({ n, device, isPageSection = false }) {
           }
           e.preventDefault();
           e.stopPropagation();
+          if (e.dataTransfer.types.includes("text/x-comp") || e.dataTransfer.types.includes("text/x-move")) c.hintDrop(e, n.id);
         },
         onDrop: (e) => {
           if (e.dataTransfer.types.includes("text/x-node")) {
@@ -580,21 +833,21 @@ function Render({ n, device, isPageSection = false }) {
         { ...common, ...dropProps },
         p.text || null,
         n.children.map((ch) => <Render key={ch.id} n={ch} device={device} />),
-        empty && !c.preview ? <span key="hint" style={{ color: "#94a3b8", fontSize: 12, pointerEvents: "none" }}>Drop components here</span> : null
+        empty && !c.preview ? <span key="hint" style={{ color: "#94a3b8", fontSize: 12, pointerEvents: "none" }}>Drop components here</span> : null,
+        sectionHandle
       );
     }
   }
 }
 
 /* --------------------------- small UI parts ------------------------ */
-const Section = ({ title, children, open: o0 = true }) => {
-  const [o, setO] = useState(o0);
+const Section = ({ title, children, open, onToggle }) => {
   return (
     <div className="border-b border-gray-100 py-3">
-      <button onClick={() => setO(!o)} className="flex w-full items-center gap-1 text-left text-[13px] font-semibold text-gray-800">
-        <span className="flex w-3 text-gray-400"><Ico n={o ? "down" : "right"} size={13} /></span>{title}
+      <button type="button" aria-expanded={open} onClick={onToggle} className="flex w-full items-center gap-1 text-left text-[13px] font-semibold text-gray-800">
+        <span className="flex w-3 text-gray-400"><Ico n={open ? "down" : "right"} size={13} /></span>{title}
       </button>
-      {o && <div className="mt-3 space-y-3">{children}</div>}
+      {open && <div className="mt-3 space-y-3">{children}</div>}
     </div>
   );
 };
@@ -604,7 +857,7 @@ const Seg = ({ value, options, onChange }) => (
       const v = typeof o === "string" ? o : o.value;
       const l = typeof o === "string" ? o : o.label;
       return (
-        <button key={v} onClick={() => onChange(v)} className={`flex-1 rounded px-2 py-1 ${value === v ? "bg-white font-medium text-blue-600 shadow-sm" : "text-gray-600"}`}>{l}</button>
+        <button key={v} type="button" onClick={() => onChange(v)} className={`flex-1 rounded px-2 py-1 ${value === v ? "bg-white font-medium text-blue-600 shadow-sm" : "text-gray-600"}`}>{l}</button>
       );
     })}
   </div>
@@ -619,6 +872,42 @@ const Inp = ({ value, onChange, placeholder, type = "text", autoFocus = false })
   <input type={type} value={value ?? ""} placeholder={placeholder} autoFocus={autoFocus} onChange={(e) => onChange(e.target.value)}
     className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500" />
 );
+const StepInp = ({ value, onChange, placeholder, step = 1, defaultUnit = "", compact = false, label = "value" }) => {
+  const rawValue = String(value ?? "").trim();
+  const match = /^(-?(?:\d+\.?\d*|\.\d+))(.*)$/.exec(rawValue || String(placeholder ?? "").trim());
+  const adjust = (direction) => {
+    if (!match) return;
+    const precision = Math.min(6, (String(step).split(".")[1] || "").length);
+    const next = Number((Number(match[1]) + direction * step).toFixed(precision));
+    onChange(`${next}${match[2].trim() || defaultUnit}`);
+  };
+  const stepButton = (direction) => (
+    <button type="button" aria-label={`${direction > 0 ? "Increase" : "Decrease"} ${label}`} title={`${direction > 0 ? "Increase" : "Decrease"} ${label}`}
+      disabled={!match} onClick={() => adjust(direction)}
+      className="flex flex-1 items-center justify-center text-gray-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-30">
+      <Ico n={direction > 0 ? "up" : "down"} size={compact ? 8 : 10} />
+    </button>
+  );
+  return (
+    <div className={compact ? "relative w-12" : "relative w-full min-w-0"}>
+      <input type="text" inputMode="decimal" value={value ?? ""} placeholder={placeholder}
+        aria-label={label} onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+            e.preventDefault();
+            adjust(e.key === "ArrowUp" ? 1 : -1);
+          }
+        }}
+        className={compact
+          ? "w-full bg-transparent pr-3 text-center text-xs outline-none placeholder:text-gray-400 focus:text-blue-600"
+          : "w-full rounded-md border border-gray-200 bg-white px-2 py-1 pr-6 text-xs outline-none focus:border-blue-500"} />
+      <div className={`absolute inset-y-0 right-0 flex flex-col ${compact ? "w-3" : "w-5"}`}>
+        {stepButton(1)}
+        {stepButton(-1)}
+      </div>
+    </div>
+  );
+};
 const Sel = ({ value, options, onChange }) => (
   <select value={value ?? ""} onChange={(e) => onChange(e.target.value)} className="w-full rounded-md border border-gray-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-blue-500">
     {options.map((o) => <option key={o} value={o}>{o || "—"}</option>)}
@@ -628,17 +917,22 @@ const Area = ({ value, onChange, rows = 3, autoFocus = false }) => (
   <textarea rows={rows} value={value ?? ""} autoFocus={autoFocus} onChange={(e) => onChange(e.target.value)}
     className="w-full resize-y rounded-md border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500" />
 );
+const Toggle = ({ label, checked, onChange }) => (
+  <label className="flex cursor-pointer items-center gap-2 text-xs text-gray-700">
+    <input type="checkbox" checked={!!checked} onChange={(e) => onChange(e.target.checked)} />{label}
+  </label>
+);
 const Color = ({ value, onChange }) => (
   <div className="flex gap-1.5">
     <input type="color" value={/^#[0-9a-f]{6}$/i.test(value || "") ? value : "#000000"} onChange={(e) => onChange(e.target.value)} className="h-6 w-8 shrink-0 cursor-pointer rounded border border-gray-200 bg-white p-0" />
     <Inp value={value} onChange={onChange} placeholder="none" />
   </div>
 );
-const Mini = ({ value, onChange }) => (
-  <input value={value ?? ""} placeholder="0px" onChange={(e) => onChange(e.target.value)} className="w-12 bg-transparent text-center text-xs outline-none placeholder:text-gray-400 focus:text-blue-600" />
+const Mini = ({ value, onChange, label }) => (
+  <StepInp value={value} onChange={onChange} placeholder="0px" step={1} defaultUnit="px" compact label={label} />
 );
 const IconBtn = ({ n, title, onClick, active, danger }) => (
-  <button title={title} onClick={onClick} className={`flex h-8 w-8 items-center justify-center rounded-md ${active ? "bg-gray-900 text-white" : danger ? "text-red-500 hover:bg-red-50" : "text-gray-600 hover:bg-gray-100"}`}>
+  <button type="button" title={title} aria-label={title} onClick={onClick} className={`flex h-8 w-8 items-center justify-center rounded-md ${active ? "bg-gray-900 text-white" : danger ? "text-red-500 hover:bg-red-50" : "text-gray-600 hover:bg-gray-100"}`}>
     <Ico n={n} size={17} />
   </button>
 );
@@ -684,7 +978,7 @@ function LayerItem({ n, depth, api, selectedId }) {
   const [open, setOpen] = useState(true);
   const [edit, setEdit] = useState(false);
   const sel = selectedId === n.id;
-  const glyph = { container: "container", text: "text", heading: "heading", button: "button", image: "image", list: "list", hr: "divider", stars: "rating", circle: "circle", icon: "icon" }[n.type];
+  const glyph = { container: "container", text: "text", heading: "heading", button: "button", image: "image", slider: "slider", list: "list", hr: "divider", stars: "rating", circle: "circle", icon: "icon" }[n.type];
   return (
     <div>
       <div onClick={() => api.select(n.id)} className={`group flex cursor-pointer items-center gap-1 rounded-md py-1 pr-1 text-xs ${sel ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`} style={{ paddingLeft: 4 + depth * 14 }}>
@@ -798,22 +1092,21 @@ function SectionsPanel({ onAdd, onPreviewVisibilityChange }) {
     </div>
   );
 }
-function ComponentsPanel({ onAdd }) {
+function ComponentsPanel() {
   const [q, setQ] = useState("");
   const list = COMPONENTS.filter((c) => c.label.toLowerCase().includes(q.toLowerCase()));
   return (
     <>
       <SearchBox value={q} onChange={setQ} placeholder="Search components…" />
-      <p className="mt-2 text-[11px] text-gray-500">Click to add, or drag onto the canvas.</p>
+      <p className="mt-2 text-[11px] text-gray-500">Drag a component onto the canvas and drop it where you want it.</p>
       <div className="mt-2 grid min-h-0 flex-1 grid-cols-2 content-start gap-2 overflow-y-auto pr-1">
         {list.map((c) => (
-          <button key={c.key} draggable
+          <div key={c.key} draggable
             onDragStart={(e) => { e.dataTransfer.setData("text/x-comp", c.key); e.dataTransfer.effectAllowed = "copy"; }}
-            onClick={() => onAdd(c.build())}
-            className="flex h-[84px] flex-col items-center justify-center gap-1 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 hover:border-blue-400 hover:bg-blue-50">
+            className="flex h-[84px] cursor-grab flex-col items-center justify-center gap-1 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 hover:border-blue-400 hover:bg-blue-50 active:cursor-grabbing">
             <span className="text-blue-600"><Ico n={c.glyph} size={20} /></span>
             <span className="text-[11px]">{c.label}</span>
-          </button>
+          </div>
         ))}
         {!list.length && <p className="col-span-2 p-2 text-xs text-gray-500">No components found.</p>}
       </div>
@@ -892,8 +1185,78 @@ const gapOf = (st, which) => {
 };
 const SIDE_KEYS = ["top", "right", "bottom", "left"];
 
+/* config editor for the Slider component */
+function SliderConfig({ p, api }) {
+  const slides = Array.isArray(p.slides) ? p.slides : [];
+  const setSlides = (next) => api.setProps({ slides: next });
+  const patch = (i, o) => setSlides(slides.map((s, j) => (j === i ? { ...s, ...o } : s)));
+  const move = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= slides.length) return;
+    const next = [...slides];
+    [next[i], next[j]] = [next[j], next[i]];
+    setSlides(next);
+  };
+  const upload = (i, file) => {
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => patch(i, { src: r.result });
+    r.readAsDataURL(file);
+  };
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <Toggle label="Arrows" checked={p.arrows !== false} onChange={(v) => api.setProps({ arrows: v })} />
+        <Toggle label="Dots" checked={p.dots !== false} onChange={(v) => api.setProps({ dots: v })} />
+        <Toggle label="Loop" checked={p.loop !== false} onChange={(v) => api.setProps({ loop: v })} />
+        <Toggle label="Autoplay" checked={!!p.autoplay} onChange={(v) => api.setProps({ autoplay: v })} />
+      </div>
+      {p.autoplay && (
+        <Field label="Delay (ms)"><Inp value={p.interval} onChange={(v) => api.setProps({ interval: v.replace(/\D/g, "") })} placeholder="4000" /></Field>
+      )}
+      <Field label="Image fit"><Sel value={p.fit || "cover"} options={["cover", "contain", "fill"]} onChange={(v) => api.setProps({ fit: v })} /></Field>
+      <div className="space-y-2 rounded-lg bg-gray-50 p-2">
+        <span className="block text-xs font-medium text-gray-700">Slides visible at once</span>
+        <Field label="Desktop"><Sel value={String(perViewOf(p, "desktop"))} options={["1", "2", "3", "4", "5", "6"]} onChange={(v) => api.setProps({ perView: +v })} /></Field>
+        <Field label="Tablet"><Sel value={String(perViewOf(p, "tablet"))} options={["1", "2", "3", "4", "5", "6"]} onChange={(v) => api.setProps({ perViewTablet: +v })} /></Field>
+        <Field label="Mobile"><Sel value={String(perViewOf(p, "mobile"))} options={["1", "2", "3", "4", "5", "6"]} onChange={(v) => api.setProps({ perViewMobile: +v })} /></Field>
+        <Field label="Gap (px)"><Inp value={p.gap} onChange={(v) => api.setProps({ gap: v.replace(/\D/g, "") })} placeholder="0" /></Field>
+      </div>
+      <p className="text-[11px] text-gray-500">Autoplay runs in Preview and in the exported page, never while editing.</p>
+
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-gray-700">Slides ({slides.length})</span>
+        <button type="button" onClick={() => setSlides([...slides, newSlide(slides.length + 1)])} className="rounded-md bg-gray-900 px-2 py-1 text-[11px] font-medium text-white hover:bg-black">Add slide</button>
+      </div>
+      {slides.map((s, i) => (
+        <div key={i} className="space-y-1.5 rounded-lg border border-gray-200 p-2">
+          <div className="flex items-center gap-2">
+            <img src={s.src} alt="" className="h-9 w-14 shrink-0 rounded object-cover" />
+            <span className="flex-1 text-xs font-medium text-gray-700">Slide {i + 1}</span>
+            <button type="button" title="Move up" aria-label="Move slide up" onClick={() => move(i, -1)} className="p-0.5 text-gray-500 hover:text-gray-900"><Ico n="up" size={13} /></button>
+            <button type="button" title="Move down" aria-label="Move slide down" onClick={() => move(i, 1)} className="p-0.5 text-gray-500 hover:text-gray-900"><Ico n="down" size={13} /></button>
+            <button type="button" title="Remove slide" aria-label="Remove slide" onClick={() => setSlides(slides.filter((_, j) => j !== i))} className="p-0.5 text-red-400 hover:text-red-600"><Ico n="trash" size={13} /></button>
+          </div>
+          <Inp value={s.src?.startsWith("data:") ? "(uploaded / placeholder)" : s.src} onChange={(v) => { if (v !== "(uploaded / placeholder)") patch(i, { src: v }); }} placeholder="Image URL" />
+          <Inp value={s.alt} onChange={(v) => patch(i, { alt: v })} placeholder="Alt text" />
+          <Inp value={s.caption} onChange={(v) => patch(i, { caption: v })} placeholder="Caption text shown on the image (optional)" />
+          <label className="block cursor-pointer rounded-md border border-gray-200 py-1 text-center text-[11px] text-gray-700 hover:bg-gray-50">
+            Upload image
+            <input type="file" accept="image/*" hidden onChange={(e) => { upload(i, e.target.files[0]); e.target.value = ""; }} />
+          </label>
+        </div>
+      ))}
+      {!slides.length && <p className="text-[11px] text-gray-500">No slides yet. Click “Add slide”.</p>}
+    </div>
+  );
+}
+
 function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }) {
   const fileRef = useRef(null);
+  /* States + Size are open by default; sections no longer close each other.
+     RightPanel is remounted per selected node (key={selNode.id}), so this default applies on every new selection. */
+  const [openSections, setOpenSections] = useState(["states", "size"]);
+  const isOpen = (id) => openSections.includes(id);
   const editKey = stateTab === "hover" ? "hover" : DEVICES[device].key;
   const cur = resolveStyle(n, device, stateTab === "hover");
   const set = (k, v) => api.setStyles({ [k]: v }, editKey);
@@ -911,8 +1274,9 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
   const sidesOf = (prop) => Object.fromEntries(SIDE_KEYS.map((sd) => [sd, boxSide(cur, prop, sd)]));
   const margin = sidesOf("margin");
   const padding = sidesOf("padding");
-  const colCount = (/repeat\((\d+)/.exec(cur.gridTemplateColumns || "") || [])[1] || "";
   const posKind = cur.position || "static";
+  const toggleSection = (section) =>
+    setOpenSections((list) => (list.includes(section) ? list.filter((x) => x !== section) : [...list, section]));
 
   /* write all four longhands and drop the shorthand so nothing conflicts */
   const setBox = (prop, side, v) => {
@@ -949,7 +1313,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
       <div className="px-4 pt-3">
         <div className="flex items-center justify-between">
           <span className="text-[13px] font-semibold capitalize text-gray-900">{n.type} <span className="font-normal text-gray-400">· {n.name}</span></span>
-          <button onClick={() => api.select(null)} className="text-gray-400 hover:text-gray-700"><Ico n="close" size={15} /></button>
+          <button onClick={() => api.select(null)} aria-label="Close panel" className="text-gray-400 hover:text-gray-700"><Ico n="close" size={15} /></button>
         </div>
         <div className="mt-2 flex gap-4 border-b border-gray-100 text-xs">
           {[["design", "Design"], ["config", "Config"], ["interactions", "Interactions"], ["a11y", "Accessibility"]].filter(([k]) => !isPage || k === "design").map(([k, l]) => (
@@ -961,7 +1325,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
       <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-4">
         {tab === "design" && (
           <>
-            <Section title="States">
+            <Section title="States" open={isOpen("states")} onToggle={() => toggleSection("states")}>
               <div className="flex gap-2">
                 <button onClick={() => setStateTab("default")} className={`rounded-md border px-3 py-1 text-xs ${stateTab === "default" ? "border-blue-500 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-600"}`}>Default</button>
                 {!isPage && <button onClick={() => setStateTab("hover")} className={`rounded-md border px-3 py-1 text-xs ${stateTab === "hover" ? "border-blue-500 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-600"}`}>Hover</button>}
@@ -975,7 +1339,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
               )}
             </Section>
 
-            <Section title="Size">
+            <Section title="Size" open={isOpen("size")} onToggle={() => toggleSection("size")}>
               {!isPage && (<>
                 <Field label="Width">
                   <div className="flex gap-1">
@@ -1004,7 +1368,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
             </Section>
 
             {isC && (
-              <Section title="Layout">
+              <Section title="Layout" open={isOpen("layout")} onToggle={() => toggleSection("layout")}>
                 <Seg value={isGrid ? "columns" : layoutOn ? "auto" : ""} options={[{ value: "auto", label: "Auto Layout" }, { value: "columns", label: "Columns" }]}
                   onChange={(m) => m === "columns"
                     ? api.setStyles({ display: "grid", gridTemplateColumns: "repeat(2, 1fr)" }, editKey)
@@ -1028,8 +1392,8 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
                       <Sel value={String(trackCount(cur.gridTemplateColumns))} options={Array.from({ length: 12 }, (_, i) => String(i + 1))}
                         onChange={(v) => set("gridTemplateColumns", `repeat(${v}, 1fr)`)} />
                     </Field>
-                    <Field label="Col Gap"><Inp value={gapOf(cur, "col")} onChange={(v) => api.setStyles({ gap: "", columnGap: v, rowGap: gapOf(cur, "row") }, editKey)} placeholder="0px" /></Field>
-                    <Field label="Row Gap"><Inp value={gapOf(cur, "row")} onChange={(v) => api.setStyles({ gap: "", rowGap: v, columnGap: gapOf(cur, "col") }, editKey)} placeholder="0px" /></Field>
+                    <Field label="Col Gap"><StepInp value={gapOf(cur, "col")} onChange={(v) => api.setStyles({ gap: "", columnGap: v, rowGap: gapOf(cur, "row") }, editKey)} placeholder="0px" step={1} defaultUnit="px" label="column gap" /></Field>
+                    <Field label="Row Gap"><StepInp value={gapOf(cur, "row")} onChange={(v) => api.setStyles({ gap: "", rowGap: v, columnGap: gapOf(cur, "col") }, editKey)} placeholder="0px" step={1} defaultUnit="px" label="row gap" /></Field>
                     <Field label="Align"><Sel value={cur.alignItems || ""} options={["", "stretch", "flex-start", "center", "flex-end"]} onChange={(v) => set("alignItems", v)} /></Field>
                   </>
                 ) : layoutOn ? (
@@ -1041,7 +1405,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
                         <Seg value={cur.justifyContent === "space-between" ? "spaced" : "packed"} options={[{ value: "packed", label: "Packed" }, { value: "spaced", label: "Spaced" }]}
                           onChange={(m) => set("justifyContent", m === "spaced" ? "space-between" : "flex-start")} />
                         <span className="block text-xs text-gray-500">Gap</span>
-                        <Inp value={cur.gap} onChange={(v) => set("gap", v)} placeholder="0px" />
+                        <StepInp value={cur.gap} onChange={(v) => set("gap", v)} placeholder="0px" step={1} defaultUnit="px" label="gap" />
                         <span className="block text-xs text-gray-500">Order</span>
                         <Seg value={reversed ? "reverse" : "forward"} options={[{ value: "forward", label: "Forward" }, { value: "reverse", label: "Reverse" }]}
                           onChange={(m) => set("flexDirection", axis + (m === "reverse" ? "-reverse" : ""))} />
@@ -1050,7 +1414,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
                         {[0, 1, 2].flatMap((r) => [0, 1, 2].map((cc) => {
                           const main = axis === "row" ? cc : r, cross = axis === "row" ? r : cc;
                           const on = cur.justifyContent === V3[main] && cur.alignItems === V3[cross];
-                          return <button key={r + "-" + cc} onClick={() => api.setStyles({ justifyContent: V3[main], alignItems: V3[cross] }, editKey)} className={`rounded-full ${on ? "bg-blue-500" : "bg-gray-300 hover:bg-gray-400"}`} />;
+                          return <button key={r + "-" + cc} aria-label="Set alignment" onClick={() => api.setStyles({ justifyContent: V3[main], alignItems: V3[cross] }, editKey)} className={`rounded-full ${on ? "bg-blue-500" : "bg-gray-300 hover:bg-gray-400"}`} />;
                         }))}
                       </div>
                     </div>
@@ -1059,7 +1423,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
               </Section>
             )}
 
-            {!isPage && (<Section title="Visibility">
+            {!isPage && (<Section title="Visibility" open={isOpen("visibility")} onToggle={() => toggleSection("visibility")}>
               <div className="flex gap-2">
                 {["mobile", "tablet", "desktop"].map((d) => (
                   <button key={d} onClick={() => api.toggleHide(n.id, d)} className={`flex-1 rounded-md border px-2 py-1 text-xs capitalize ${n.hide[d] ? "border-red-300 bg-red-50 text-red-600" : "border-gray-200 text-gray-600"}`}>
@@ -1069,30 +1433,30 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
               </div>
             </Section>)}
 
-            <Section title="Spacing">
+            <Section title="Spacing" open={isOpen("spacing")} onToggle={() => toggleSection("spacing")}>
               <div className="rounded-lg bg-orange-50 p-2 text-[10px] text-orange-500">
                 <div className="mb-0.5">Margin</div>
-                <div className="flex justify-center"><Mini value={margin.top} onChange={(v) => setBox("margin", "top", v)} /></div>
+                <div className="flex justify-center"><Mini value={margin.top} onChange={(v) => setBox("margin", "top", v)} label="top margin" /></div>
                 <div className="flex items-center justify-between">
-                  <Mini value={margin.left} onChange={(v) => setBox("margin", "left", v)} />
+                  <Mini value={margin.left} onChange={(v) => setBox("margin", "left", v)} label="left margin" />
                   <div className="mx-1 flex-1 rounded-md bg-green-50 p-1 text-green-600">
                     <div>Padding</div>
-                    <div className="flex justify-center"><Mini value={padding.top} onChange={(v) => setBox("padding", "top", v)} /></div>
+                    <div className="flex justify-center"><Mini value={padding.top} onChange={(v) => setBox("padding", "top", v)} label="top padding" /></div>
                     <div className="flex items-center justify-between">
-                      <Mini value={padding.left} onChange={(v) => setBox("padding", "left", v)} />
+                      <Mini value={padding.left} onChange={(v) => setBox("padding", "left", v)} label="left padding" />
                       <div className="h-5 w-8 rounded bg-white" />
-                      <Mini value={padding.right} onChange={(v) => setBox("padding", "right", v)} />
+                      <Mini value={padding.right} onChange={(v) => setBox("padding", "right", v)} label="right padding" />
                     </div>
-                    <div className="flex justify-center"><Mini value={padding.bottom} onChange={(v) => setBox("padding", "bottom", v)} /></div>
+                    <div className="flex justify-center"><Mini value={padding.bottom} onChange={(v) => setBox("padding", "bottom", v)} label="bottom padding" /></div>
                   </div>
-                  <Mini value={margin.right} onChange={(v) => setBox("margin", "right", v)} />
+                  <Mini value={margin.right} onChange={(v) => setBox("margin", "right", v)} label="right margin" />
                 </div>
-                <div className="flex justify-center"><Mini value={margin.bottom} onChange={(v) => setBox("margin", "bottom", v)} /></div>
+                <div className="flex justify-center"><Mini value={margin.bottom} onChange={(v) => setBox("margin", "bottom", v)} label="bottom margin" /></div>
               </div>
               <p className="text-[11px] text-gray-500">Use values like 16px, 2rem, auto. Shorthand padding and margin values are shown per side.</p>
             </Section>
 
-            <Section title="Positioning" open={false}>
+            <Section title="Positioning" open={isOpen("positioning")} onToggle={() => toggleSection("positioning")}>
               <Seg value={posKind} options={["static", "relative", "absolute", "sticky", "fixed"]} onChange={(v) => set("position", v === "static" ? "" : v)} />
               {posKind !== "static" && (
                 <div className="grid grid-cols-2 gap-2">
@@ -1103,25 +1467,25 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
             </Section>
 
             {(isTxt || isPage) && (
-              <Section title="Typography">
+              <Section title="Typography" open={isOpen("typography")} onToggle={() => toggleSection("typography")}>
                 <Field label="Font"><Inp value={cur.fontFamily} onChange={(v) => set("fontFamily", v)} placeholder="inherit" /></Field>
-                <Field label="Size"><Inp value={cur.fontSize} onChange={(v) => set("fontSize", v)} placeholder="16px" /></Field>
+                <Field label="Size"><StepInp value={cur.fontSize} onChange={(v) => set("fontSize", v)} placeholder="16px" step={1} defaultUnit="px" label="font size" /></Field>
                 <Field label="Weight"><Sel value={cur.fontWeight || ""} options={["", "300", "400", "500", "600", "700", "800", "900"]} onChange={(v) => set("fontWeight", v)} /></Field>
                 <Field label="Color"><Color value={cur.color} onChange={(v) => set("color", v)} /></Field>
-                <Field label="Line h."><Inp value={cur.lineHeight} onChange={(v) => set("lineHeight", v)} placeholder="1.5" /></Field>
-                <Field label="Letter sp."><Inp value={cur.letterSpacing} onChange={(v) => set("letterSpacing", v)} placeholder="0" /></Field>
+                <Field label="Line h."><StepInp value={cur.lineHeight} onChange={(v) => set("lineHeight", v)} placeholder="1.5" step={0.05} label="line height" /></Field>
+                <Field label="Letter sp."><StepInp value={cur.letterSpacing} onChange={(v) => set("letterSpacing", v)} placeholder="0" step={0.1} defaultUnit="px" label="letter spacing" /></Field>
                 <Seg value={cur.textAlign || "left"} options={["left", "center", "right"]} onChange={(v) => set("textAlign", v)} />
               </Section>
             )}
 
-            <Section title="Background">
+            <Section title="Background" open={isOpen("background")} onToggle={() => toggleSection("background")}>
               <Field label="Color"><Color value={cur.background} onChange={(v) => set("background", v)} /></Field>
               {isC && (
                 <Field label="Image URL"><Inp value={(cur.backgroundImage || "").replace(/^url\(["']?|["']?\)$/g, "")} onChange={(v) => api.setStyles(v ? { backgroundImage: `url("${v}")`, backgroundSize: "cover", backgroundPosition: "center" } : { backgroundImage: "" }, editKey)} placeholder="https://…" /></Field>
               )}
             </Section>
 
-            <Section title="Border & effects">
+            <Section title="Border & effects" open={isOpen("border")} onToggle={() => toggleSection("border")}>
               <Field label="Border"><Inp value={cur.border} onChange={(v) => set("border", v)} placeholder="1px solid #e5e7eb" /></Field>
               <Field label="Radius"><Inp value={cur.borderRadius} onChange={(v) => set("borderRadius", v)} placeholder="0px" /></Field>
               <Field label="Shadow"><Inp value={cur.boxShadow} onChange={(v) => set("boxShadow", v)} placeholder="0 4px 12px rgba(0,0,0,.1)" /></Field>
@@ -1131,7 +1495,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
               <Field label="Cursor"><Sel value={cur.cursor || ""} options={["", "pointer", "default", "not-allowed"]} onChange={(v) => set("cursor", v)} /></Field>
             </Section>
 
-            <Section title="Custom CSS" open={false}>
+            <Section title="Custom CSS" open={isOpen("custom-css")} onToggle={() => toggleSection("custom-css")}>
               <CustomCss key={n.id + editKey} value={n.s[editKey]} onApply={(o) => api.replaceStyle(editKey, o)} />
               <p className="text-[11px] text-gray-500">One property per line. Applies to the current device / state.</p>
             </Section>
@@ -1150,6 +1514,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
               <div><span className="mb-1 block text-xs text-gray-500">Items (one per line)</span><Area rows={5} value={(p.items || []).join("\n")} onChange={(v) => api.setProps({ items: v.split("\n") })} /></div>
             )}
             {n.type === "stars" && <Field label="Rating"><Sel value={String(p.rating ?? 5)} options={["0", "1", "2", "3", "4", "5"]} onChange={(v) => api.setProps({ rating: +v })} /></Field>}
+            {n.type === "slider" && <SliderConfig p={p} api={api} />}
             {n.type === "image" && (
               <>
                 <Field label="Image URL"><Inp autoFocus value={p.src?.startsWith("data:") ? "(uploaded / placeholder)" : p.src} onChange={(v) => api.setProps({ src: v })} /></Field>
@@ -1215,7 +1580,7 @@ function DimPanel({ d, width, onChange, onClose }) {
     <div className="w-[240px] rounded-xl bg-white p-4 shadow-lg ring-1 ring-black/5">
       <div className="flex items-center justify-between">
         <span className="text-[13px] font-semibold">Preview Dimensions</span>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><Ico n="close" size={15} /></button>
+        <button onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-700"><Ico n="close" size={15} /></button>
       </div>
       <div className="mt-3 text-xs text-gray-500">Set Preview Width</div>
       <div className="mt-1 flex items-center gap-2 rounded-md border border-gray-200 px-2 py-1.5 focus-within:border-blue-500">
@@ -1279,6 +1644,14 @@ export default function Editor() {
   const [draggingSection, setDraggingSection] = useState(false);
   const [sectionDragOutline, setSectionDragOutline] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
+  const [dropLine, setDropLine] = useState(null); // blue insertion line while dragging a component / element
+  const movingRef = useRef(null); // id of the element being moved inside the page
+  useEffect(() => {
+    const clear = () => { movingRef.current = null; setDropLine(null); };
+    window.addEventListener("dragend", clear);
+    window.addEventListener("drop", clear);
+    return () => { window.removeEventListener("dragend", clear); window.removeEventListener("drop", clear); };
+  }, []);
   const [pop, setPop] = useState(null); // settings | publish | previewMenu | nameEdit
   const [preview, setPreview] = useState(null);
   const [saveStatus, setSaveStatus] = useState("saved");
@@ -1615,27 +1988,55 @@ export default function Editor() {
     update((p) => ({ ...p, children: insertInto(p.children, null, nn, index) }));
     setSelId(nn.id);
   };
+  /* where inside a container would a drop land? returns the child index and a line to draw */
+  const dropSlot = (parentId, e, excludeId) => {
+    const parent = findNode(page.children, parentId);
+    const parentEl = e.currentTarget?.dataset?.node === parentId ? e.currentTarget : document.querySelector(`[data-node="${parentId}"]`);
+    if (!parent || !parentEl) return null;
+    const kids = [...parentEl.children].filter((ch) => ch.dataset.node && ch.dataset.node !== excludeId);
+    const cs = window.getComputedStyle(parentEl);
+    const horizontal = cs.display === "grid" || (cs.display === "flex" && cs.flexDirection.startsWith("row"));
+    const coord = horizontal ? e.clientX : e.clientY;
+    const target = kids.find((ch) => {
+      const r = ch.getBoundingClientRect();
+      return coord < (horizontal ? r.left + r.width / 2 : r.top + r.height / 2);
+    });
+    const siblings = parent.children.filter((ch) => ch.id !== excludeId);
+    const index = target ? Math.max(0, siblings.findIndex((ch) => ch.id === target.dataset.node)) : siblings.length;
+    let line;
+    if (target) {
+      const r = target.getBoundingClientRect();
+      line = horizontal ? { left: r.left - 2, top: r.top, width: 4, height: r.height } : { left: r.left, top: r.top - 2, width: r.width, height: 4 };
+    } else if (kids.length) {
+      const r = kids[kids.length - 1].getBoundingClientRect();
+      line = horizontal ? { left: r.right - 2, top: r.top, width: 4, height: r.height } : { left: r.left, top: r.bottom - 2, width: r.width, height: 4 };
+    } else {
+      const r = parentEl.getBoundingClientRect();
+      line = { left: r.left + 6, top: r.top + 6, width: Math.max(0, r.width - 12), height: 4 };
+    }
+    return { index, line };
+  };
+  const insideItself = (id, parentId) => {
+    if (!id) return false;
+    if (id === parentId) return true;
+    const moving = findNode(page.children, id);
+    return !!(moving && findNode(moving.children, parentId));
+  };
+  const hintDrop = (e, parentId) => {
+    if (insideItself(movingRef.current, parentId)) { setDropLine(null); return; }
+    const slot = dropSlot(parentId, e, movingRef.current);
+    if (!slot) return;
+    setDropLine((old) => old && old.left === slot.line.left && old.top === slot.line.top && old.width === slot.line.width && old.height === slot.line.height ? old : slot.line);
+  };
+  const moveNodeTo = (id, parentId, index) => update((p) => {
+    const moving = findNode(p.children, id);
+    if (!moving || parentId == null || parentId === id || findNode(moving.children, parentId)) return p;
+    return { ...p, children: insertInto(removeNode(p.children, id), parentId, moving, index) };
+  });
   const addComponentAtDrop = (nn, parentId, e) => {
     if (parentId == null) return addSectionAtDrop(nn, e);
-
-    const parent = findNode(page.children, parentId);
-    const parentElement = document.querySelector(`[data-node="${parentId}"]`);
-    if (!parent || !parentElement) return addNode(nn, parentId);
-
-    const children = [...parentElement.children].filter((child) => child.dataset.node);
-    const style = window.getComputedStyle(parentElement);
-    const horizontal = style.display === "grid" || (style.display === "flex" && style.flexDirection.startsWith("row"));
-    const coordinate = horizontal ? e.clientX : e.clientY;
-    const targetChild = children.find((child) => {
-      const bounds = child.getBoundingClientRect();
-      const middle = horizontal ? bounds.left + bounds.width / 2 : bounds.top + bounds.height / 2;
-      return coordinate < middle;
-    });
-    const index = targetChild
-      ? parent.children.findIndex((child) => child.id === targetChild.dataset.node)
-      : parent.children.length;
-
-    update((p) => ({ ...p, children: insertInto(p.children, parentId, nn, index) }));
+    const slot = dropSlot(parentId, e, null);
+    update((p) => ({ ...p, children: insertInto(p.children, parentId, nn, slot ? slot.index : undefined) }));
     setSelId(nn.id);
   };
   const useAsset = (a) => {
@@ -1701,6 +2102,16 @@ export default function Editor() {
     if (sourceId) {
       reorderSection(sourceId, null, "after");
       setDropTarget(null);
+      return;
+    }
+    const moveId = e.dataTransfer.getData("text/x-move") || movingRef.current;
+    if (moveId && e.dataTransfer.types.includes("text/x-move")) {
+      if (parentId != null && !insideItself(moveId, parentId)) {
+        const slot = dropSlot(parentId, e, moveId);
+        if (slot) { moveNodeTo(moveId, parentId, slot.index); setSelId(moveId); }
+      }
+      movingRef.current = null;
+      setDropLine(null);
       return;
     }
     const sectionKey = e.dataTransfer.getData("text/x-section");
@@ -1777,7 +2188,7 @@ export default function Editor() {
   };
 
   const ctx = {
-    preview: false, selectedId: selId, activeDevice, stateTab, inlineEdit, inlineEditRef,
+    preview: false, zoom: s, selectedId: selId, activeDevice, stateTab, inlineEdit, inlineEditRef,
     changeInlineText: (id, value) => {
       setInlineEdit((edit) => edit?.id === id ? { ...edit, value } : edit);
       patchId(id, (n) => n.props.text === value ? n : ({ ...n, props: { ...n.props, text: value } }), "inline-content");
@@ -1793,11 +2204,14 @@ export default function Editor() {
     },
     endSectionDrag: () => { setDraggingSection(false); setSectionDragOutline(null); setDropTarget(null); },
     dragOverNode, dropNode,
+    hintDrop,
+    startMove: (id) => { movingRef.current = id; },
+    endMove: () => { movingRef.current = null; setDropLine(null); },
   };
   const visible = Object.keys(DEVICES).filter((d) => show[d]);
 
   const railBtn = (id, icon, title) => (
-    <button key={id} title={title} onClick={() => { if (leftTab === id && leftOpen) { setLeftOpen(false); setSectionPreviewsVisible(false); } else { setLeftTab(id); setLeftOpen(true); setSectionPreviewsVisible(false); } }}
+    <button key={id} title={title} aria-label={title} onClick={() => { if (leftTab === id && leftOpen) { setLeftOpen(false); setSectionPreviewsVisible(false); } else { setLeftTab(id); setLeftOpen(true); setSectionPreviewsVisible(false); } }}
       className={`flex h-9 w-9 items-center justify-center rounded-lg ${leftTab === id && leftOpen ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-100"}`}>
       <Ico n={icon} />
     </button>
@@ -1822,7 +2236,7 @@ export default function Editor() {
         }}
         onMouseDown={onCanvasDown}
         onDragOver={(e) => {
-          if (e.dataTransfer.types.includes("text/x-comp") || e.dataTransfer.types.includes("text/x-asset") || e.dataTransfer.types.includes("text/x-section") || e.dataTransfer.types.includes("text/x-node")) e.preventDefault();
+          if (e.dataTransfer.types.includes("text/x-comp") || e.dataTransfer.types.includes("text/x-asset") || e.dataTransfer.types.includes("text/x-section") || e.dataTransfer.types.includes("text/x-node") || e.dataTransfer.types.includes("text/x-move")) e.preventDefault();
           if (e.dataTransfer.types.includes("text/x-node")) {
             setSectionDragOutline((outline) => outline ? {
               ...outline,
@@ -1837,7 +2251,7 @@ export default function Editor() {
         onClick={() => { if (justZoomed.current) { justZoomed.current = false; return; } select(null); }}>
         <div className="absolute left-0 top-0 flex items-start"
           style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${s})`, transformOrigin: "0 0", gap: 16 / s, width: "max-content" }}>
-          <style>{`.rp-frame *{box-sizing:border-box}.rp-frame :where(h1,h2,h3,h4,h5,h6,p,ul,hr){margin:0}.rp-frame button{font-family:inherit}`}</style>
+          <style>{FRAME_CSS}</style>
           {visible.map((d, i) => {
             const W = widths[d];
             return (
@@ -1847,14 +2261,14 @@ export default function Editor() {
                   <div className="relative flex items-center gap-2 rounded-lg bg-white px-3 shadow-sm ring-1 ring-black/5"
                     style={{ width: Math.max(W * s, 175), height: 48, transform: `scale(${1 / s})`, transformOrigin: "0 0" }}>
                     {i === 0 && (
-                      <button title="Show devices" onClick={(e) => { e.stopPropagation(); openDim(e, "devices"); }}
+                      <button title="Show devices" aria-label="Show devices" onClick={(e) => { e.stopPropagation(); openDim(e, "devices"); }}
                         className="absolute flex items-center justify-center rounded-lg bg-white shadow-sm ring-1 ring-black/5"
                         style={{ left: -60, top: 0, width: 48, height: 48 }}><Ico n="sections" /></button>
                     )}
                     <span className={`text-sm font-semibold ${activeDevice === d ? "text-blue-600" : ""}`}>{DEVICES[d].label}</span>
                     <button onClick={(e) => { e.stopPropagation(); openDim(e, "width", d); }}
                       className="flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-xs hover:bg-gray-50">{W}px <Ico n="down" size={12} /></button>
-                    <button onClick={(e) => { e.stopPropagation(); setPreview(d); }} title="Preview"
+                    <button onClick={(e) => { e.stopPropagation(); setPreview(d); }} title="Preview" aria-label={`Preview ${DEVICES[d].label}`}
                       className="ml-auto flex h-7 w-7 items-center justify-center rounded border border-gray-200 text-gray-700 hover:bg-gray-50"><Ico n="play" size={13} /></button>
                   </div>
                 </div>
@@ -1875,7 +2289,7 @@ export default function Editor() {
           })}
           {!visible.length && (
             <div data-nopan className="flex items-center gap-3 text-sm text-gray-500">
-              <button onClick={(e) => { e.stopPropagation(); openDim(e, "devices"); }} className="flex items-center justify-center rounded-lg bg-white shadow-sm ring-1 ring-black/5" style={{ width: 48 / s, height: 48 / s }}><Ico n="sections" /></button>
+              <button onClick={(e) => { e.stopPropagation(); openDim(e, "devices"); }} aria-label="Show devices" className="flex items-center justify-center rounded-lg bg-white shadow-sm ring-1 ring-black/5" style={{ width: 48 / s, height: 48 / s }}><Ico n="sections" /></button>
               No device selected.
             </div>
           )}
@@ -1895,6 +2309,11 @@ export default function Editor() {
         />
       )}
 
+      {dropLine && (
+        <div aria-hidden="true" className="pointer-events-none fixed z-30 rounded bg-blue-600"
+          style={{ left: dropLine.left, top: dropLine.top, width: dropLine.width, height: dropLine.height }} />
+      )}
+
       {/* page card */}
       <div className="absolute left-3 top-3 flex h-[52px] w-[300px] items-center gap-2 rounded-xl bg-white px-3 shadow-md ring-1 ring-black/5" onClick={(e) => e.stopPropagation()}>
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-900 text-sm font-bold text-white">R</div>
@@ -1906,7 +2325,7 @@ export default function Editor() {
         <span title={saveStatus === "saving" ? "Saving changes…" : saveStatus === "error" ? "Could not save changes" : "All changes saved"} className={`shrink-0 text-[10px] ${saveStatus === "error" ? "text-red-500" : saveStatus === "saving" ? "text-gray-400" : "text-green-600"}`}>
           {saveStatus === "saving" ? "Saving…" : saveStatus === "error" ? "Save failed" : "Saved"}
         </span>
-        <button title="Page settings" onClick={() => setPop(pop === "settings" ? null : "settings")} className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-700 cursor-pointer"><Ico n="gear" size={16} /></button>
+        <button title="Page settings" aria-label="Page settings" onClick={() => setPop(pop === "settings" ? null : "settings")} className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-700 cursor-pointer"><Ico n="gear" size={16} /></button>
         {pop === "settings" && (
           <div className="absolute top-0 z-40 space-y-3 rounded-xl bg-white p-4 shadow-lg ring-1 ring-black/5"
             style={{ left: "min(calc(100% + 8px), calc(100vw - 312px))", width: "min(300px, calc(100vw - 24px))" }}>
@@ -1939,10 +2358,10 @@ export default function Editor() {
           <div className={`flex h-full ${leftTab === "sections" && sectionPreviewsVisible ? "w-[520px] max-w-[calc(100vw-80px)]" : "w-[260px]"} flex-col overflow-hidden rounded-xl bg-white p-3 shadow-md ring-1 ring-black/5`}>
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm font-semibold capitalize">{leftTab}</span>
-              <button onClick={() => { setLeftOpen(false); setSectionPreviewsVisible(false); }} className="text-gray-400 hover:text-gray-700"><Ico n="left" size={16} /></button>
+              <button onClick={() => { setLeftOpen(false); setSectionPreviewsVisible(false); }} aria-label="Collapse panel" className="text-gray-400 hover:text-gray-700"><Ico n="left" size={16} /></button>
             </div>
             {leftTab === "sections" && <SectionsPanel onAdd={addSection} onPreviewVisibilityChange={setSectionPreviewsVisible} />}
-            {leftTab === "components" && <ComponentsPanel onAdd={addAfterSelection} />}
+            {leftTab === "components" && <ComponentsPanel />}
             {leftTab === "layers" && (
               <div className="min-h-0 flex-1 overflow-y-auto">
                 <button onClick={() => select(PAGE_ID)} className={`mb-1 flex w-full items-center gap-1 rounded-md px-1 py-1 text-left text-xs font-medium ${selId === PAGE_ID ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`}><Ico n="page" size={14} />Page</button>
@@ -1959,7 +2378,7 @@ export default function Editor() {
       <div className="absolute right-3 top-3 flex h-[52px] items-center gap-2 rounded-xl bg-white px-2 shadow-md ring-1 ring-black/5" onClick={(e) => e.stopPropagation()}>
         <div className="relative flex">
           <button onClick={() => setPreview("desktop")} className="rounded-l-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">Preview</button>
-          <button onClick={() => setPop(pop === "previewMenu" ? null : "previewMenu")} className="rounded-r-lg border border-l-0 border-gray-200 px-2 text-gray-500 hover:bg-gray-50"><Ico n="down" size={14} /></button>
+          <button onClick={() => setPop(pop === "previewMenu" ? null : "previewMenu")} aria-label="Preview device menu" className="rounded-r-lg border border-l-0 border-gray-200 px-2 text-gray-500 hover:bg-gray-50"><Ico n="down" size={14} /></button>
           {pop === "previewMenu" && (
             <div className="absolute right-0 top-[40px] w-36 rounded-lg bg-white p-1 shadow-lg ring-1 ring-black/5">
               {Object.keys(DEVICES).map((d) => <button key={d} onClick={() => { setPreview(d); setPop(null); }} className="block w-full rounded px-2 py-1.5 text-left text-sm hover:bg-gray-50">{DEVICES[d].label}</button>)}
@@ -1976,7 +2395,7 @@ export default function Editor() {
               <button onClick={copyJSON} className="w-full rounded-md border border-gray-200 py-2 text-xs hover:bg-gray-50">Copy JSON</button>
               <button onClick={() => importRef.current.click()} className="w-full rounded-md border border-gray-200 py-2 text-xs hover:bg-gray-50">Import JSON</button>
               <input ref={importRef} type="file" accept="application/json" hidden onChange={(e) => { if (e.target.files[0]) importJSON(e.target.files[0]); e.target.value = ""; }} />
-              <p className="text-[11px] text-gray-500">The HTML file uses your styles, mobile/tablet overrides and hover states. Tailwind (via CDN) is included only if you used Tailwind classes.</p>
+              <p className="text-[11px] text-gray-500">The HTML file uses your styles, mobile/tablet overrides, hover states and sliders. Tailwind (via CDN) is included only if you used Tailwind classes.</p>
             </div>
           )}
         </div>
@@ -1987,7 +2406,7 @@ export default function Editor() {
         <IconBtn n="undo" title="Undo (Ctrl+Z)" onClick={undo} />
         <IconBtn n="redo" title="Redo (Ctrl+Shift+Z)" onClick={redo} />
         <span className="mx-1 h-5 w-px bg-gray-200" />
-        <select value={Math.round(zoom)} onChange={(e) => zoomAt(+e.target.value, window.innerWidth / 2, window.innerHeight / 2)} className="rounded-md border border-gray-200 px-2 py-1 text-xs">
+        <select aria-label="Zoom" value={Math.round(zoom)} onChange={(e) => zoomAt(+e.target.value, window.innerWidth / 2, window.innerHeight / 2)} className="rounded-md border border-gray-200 px-2 py-1 text-xs">
           {[...new Set([10, 25, 33, 50, 75, 100, 125, 150, 200, 300, 400, Math.round(zoom)])].sort((a, b) => a - b).map((z) => <option key={z} value={z}>{z}%</option>)}
         </select>
         <button onClick={fit} className="rounded-md border border-gray-200 px-2 py-1 text-xs hover:bg-gray-50">Fit</button>
@@ -2053,7 +2472,7 @@ export default function Editor() {
           <div className="flex-1 overflow-auto p-6">
             <Ctx.Provider value={{ preview: true }}>
               <div className="rp-frame mx-auto shadow-lg" style={{ maxWidth: "100%", minHeight: "100%", ...pageStyleFor(preview), width: Math.min(widths[preview], 1600) }}>
-                <style>{`.rp-frame *{box-sizing:border-box}.rp-frame :where(h1,h2,h3,h4,h5,h6,p,ul,hr){margin:0}.rp-frame button{font-family:inherit}`}</style>
+                <style>{FRAME_CSS}</style>
                 {page.children.map((n) => <Render key={n.id} n={n} device={preview} />)}
               </div>
             </Ctx.Provider>
@@ -2063,7 +2482,7 @@ export default function Editor() {
 
       {/* toast */}
       {toast && (
-        <div key={toast.id} className="pointer-events-none fixed left-1/2 -translate-x-1/2 rounded-lg bg-gray-900 px-4 py-2 text-xs font-medium text-white shadow-lg" style={{ bottom: 76, zIndex: 60 }}>{toast.message}</div>
+        <div key={toast.id} role="status" className="pointer-events-none fixed left-1/2 -translate-x-1/2 rounded-lg bg-gray-900 px-4 py-2 text-xs font-medium text-white shadow-lg" style={{ bottom: 76, zIndex: 60 }}>{toast.message}</div>
       )}
     </div>
   );
