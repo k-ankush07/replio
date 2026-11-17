@@ -1454,6 +1454,20 @@ const Inp = ({ value, onChange, placeholder, type = "text", autoFocus = false })
   <input type={type} value={value ?? ""} placeholder={placeholder} autoFocus={autoFocus} onChange={(e) => onChange(e.target.value)}
     className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500" />
 );
+const pixelValueFor = (value) => {
+  const match = /^((?:\d+\.?\d*|\.\d+))(?:px)?$/i.exec(String(value ?? "").trim());
+  return match ? `${match[1]}px` : "300px";
+};
+const DimensionInput = ({ value, onChange, placeholder }) => (
+  <input type="text" inputMode="decimal" value={value ?? ""} placeholder={placeholder}
+    onChange={(e) => onChange(e.target.value)}
+    onBlur={(e) => {
+      const current = e.target.value.trim();
+      if (/^(?:\d+\.?\d*|\.\d+)$/.test(current)) onChange(`${current}px`);
+    }}
+    onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+    className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500" />
+);
 const StepInp = ({ value, onChange, placeholder, step = 1, defaultUnit = "", compact = false, label = "value" }) => {
   const rawValue = String(value ?? "").trim();
   const match = /^(-?(?:\d+\.?\d*|\.\d+))(.*)$/.exec(rawValue || String(placeholder ?? "").trim());
@@ -2442,15 +2456,15 @@ function RightPanel({ node: n, device, stateTab, setStateTab, activeNodeState, s
                 <Field label="Width">
                   <div className="flex gap-1">
                     <div className="w-[96px]"><Seg value={wMode} options={[{ value: "fill", label: "Fill" }, { value: "fit", label: "Fit" }, { value: "fixed", label: "Px" }]}
-                      onChange={(m) => set("width", m === "fill" ? "100%" : m === "fit" ? "fit-content" : /^\d/.test(cur.width || "") ? cur.width : "300px")} /></div>
-                    <Inp value={cur.width} onChange={(v) => set("width", v)} placeholder="auto" />
+                      onChange={(m) => set("width", m === "fill" ? "100%" : m === "fit" ? "fit-content" : pixelValueFor(cur.width))} /></div>
+                    <DimensionInput value={cur.width} onChange={(v) => set("width", v)} placeholder={wMode === "fixed" ? "e.g. 300px" : "auto"} />
                   </div>
                 </Field>
                 <Field label="Height">
                   <div className="flex gap-1">
                     <div className="w-[96px]"><Seg value={hMode} options={[{ value: "fill", label: "Fill" }, { value: "fit", label: "Fit" }, { value: "fixed", label: "Px" }]}
-                      onChange={(m) => set("height", m === "fill" ? "100%" : m === "fit" ? "auto" : /^\d/.test(cur.height || "") ? cur.height : "300px")} /></div>
-                    <Inp value={cur.height} onChange={(v) => set("height", v)} placeholder="auto" />
+                      onChange={(m) => set("height", m === "fill" ? "100%" : m === "fit" ? "auto" : pixelValueFor(cur.height))} /></div>
+                    <DimensionInput value={cur.height} onChange={(v) => set("height", v)} placeholder={hMode === "fixed" ? "e.g. 300px" : "auto"} />
                   </div>
                 </Field>
               </>)}
