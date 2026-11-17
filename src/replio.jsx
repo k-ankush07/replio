@@ -1,11 +1,17 @@
 import React, { useState, useEffect, useRef, useContext, createContext } from "react";
 import {
-  ArrowDown, ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Circle,
-  Columns2, Copy, Eye, FileText, Grid2X2, Heading1, Heading2, Heading3,
-  Image, Images, Layers3, List, Minus, Monitor, MousePointer2, PanelsTopLeft, Play,
+  Activity, Airplay, AlignCenter, AlignJustify, AlignLeft, AlignRight, Anchor, Aperture, Archive,
+  ArrowDown, ArrowDownLeft, ArrowDownRight, ArrowRight, ArrowLeft, ArrowUp, Bell, Bookmark, Calendar,
+  Camera, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Circle, CircleAlert, CircleCheck,
+  CircleMinus, CirclePlus, CircleX, Clock, Cloud, Code, CreditCard, Download, File,
+  Columns2, Copy, Eye, FileText, Flag, Globe, Grid2X2, Heart, Heading1, Heading2, Heading3, Home,
+  Info, Link, List, Lock, Mail, MapPin, Menu, MessageCircle, Package, Pencil, Phone,
+  Image, Images, Layers3, Minus, Monitor, MousePointer2, PanelsTopLeft, Play,
   Plus, Redo2, Search, Settings, Square, Star, Trash2, Type, Undo2, Upload,
-  WrapText, X,
+  OctagonAlert, Share2, Shield, ShoppingCart, Tag, ThumbsUp, TriangleAlert, User, Users, Video, WrapText, X, Zap,
 } from "lucide-react";
+import { createPortal } from "react-dom";
+import { renderToStaticMarkup } from "react-dom/server";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -20,6 +26,18 @@ const safeUrl = (u) => {
   if (!v || /^(javascript|data|vbscript):/i.test(v)) return "";
   return v;
 };
+const hashMarkValue = (value) => String(value || "").trim().replace(/^#+/, "");
+const RESERVED_DATA_KEYS = new Set(["url-hash", "url-hash-auto", "animation", "node", "page-section", "hover-action-type", "hover-action-value", "hover-action-new-tab"]);
+const validDataKey = (key) => {
+  const name = String(key || "").replace(/^data-/i, "");
+  return /^[a-z][a-z0-9_.:-]*$/i.test(name) && !RESERVED_DATA_KEYS.has(name.toLowerCase());
+};
+const dataAttrsOf = (attrs) => Object.entries(attrs && typeof attrs === "object" ? attrs : {})
+  .filter(([key]) => validDataKey(key))
+  .map(([key, value]) => [`data-${key.replace(/^data-/i, "")}`, String(value)]);
+const TEXT_TAGS = ["p", "span", "div", "blockquote", "label"];
+const safeTextTag = (tag) => TEXT_TAGS.includes(tag) ? tag : "p";
+const safeHeadingTag = (tag) => /^h[1-6]$/.test(tag || "") ? tag : "h2";
 
 const DEVICES = {
   desktop: { label: "Desktop", key: "base" },
@@ -44,6 +62,36 @@ const ICONS = {
   button: MousePointer2, grid: Grid2X2, divider: Minus, icon: Circle, circle: Circle,
   column: Columns2, page: FileText, heading: Heading1, slider: Images,
 };
+const ICON_CHOICES = [
+  ["Activity", "Activity", Activity], ["Airplay", "Airplay", Airplay],
+  ["CircleAlert", "Alert Circle", CircleAlert], ["OctagonAlert", "Alert Octagon", OctagonAlert],
+  ["TriangleAlert", "Alert Triangle", TriangleAlert],
+  ["AlignCenter", "Align Center", AlignCenter], ["AlignJustify", "Align Justify", AlignJustify],
+  ["AlignLeft", "Align Left", AlignLeft], ["AlignRight", "Align Right", AlignRight],
+  ["Anchor", "Anchor", Anchor], ["Aperture", "Aperture", Aperture], ["Archive", "Archive", Archive],
+  ["ArrowDown", "Arrow Down", ArrowDown], ["ArrowDownLeft", "Arrow Down Left", ArrowDownLeft],
+  ["ArrowDownRight", "Arrow Down Right", ArrowDownRight], ["ArrowLeft", "Arrow Left", ArrowLeft],
+  ["ArrowRight", "Arrow Right", ArrowRight], ["ArrowUp", "Arrow Up", ArrowUp],
+  ["Bell", "Bell", Bell], ["Bookmark", "Bookmark", Bookmark], ["Calendar", "Calendar", Calendar],
+  ["Camera", "Camera", Camera], ["Check", "Check", Check], ["ChevronDown", "Chevron Down", ChevronDown],
+  ["Circle", "Circle", Circle], ["CircleCheck", "Circle Check", CircleCheck],
+  ["CircleMinus", "Circle Minus", CircleMinus], ["CirclePlus", "Plus Circle", CirclePlus],
+  ["CircleX", "Circle X", CircleX], ["Clock", "Clock", Clock], ["Cloud", "Cloud", Cloud],
+  ["Code", "Code", Code], ["CreditCard", "Credit Card", CreditCard], ["Download", "Download", Download],
+  ["Eye", "Eye", Eye], ["File", "File", File], ["FileText", "File Text", FileText],
+  ["Flag", "Flag", Flag], ["Globe", "Globe", Globe], ["Heart", "Heart", Heart],
+  ["Home", "Home", Home], ["Info", "Info", Info], ["Link", "Link", Link],
+  ["List", "List", List], ["Lock", "Lock", Lock], ["Mail", "Mail", Mail],
+  ["MapPin", "Map Pin", MapPin], ["Menu", "Menu", Menu], ["MessageCircle", "Message Circle", MessageCircle],
+  ["Minus", "Minus", Minus], ["Monitor", "Monitor", Monitor], ["Package", "Package", Package],
+  ["Pencil", "Pencil", Pencil], ["Phone", "Phone", Phone], ["Play", "Play", Play],
+  ["Plus", "Plus", Plus], ["Search", "Search", Search], ["Settings", "Settings", Settings],
+  ["Share2", "Share", Share2], ["Shield", "Shield", Shield], ["ShoppingCart", "Shopping Cart", ShoppingCart],
+  ["Star", "Star", Star], ["Tag", "Tag", Tag], ["ThumbsUp", "Thumbs Up", ThumbsUp],
+  ["Trash2", "Trash", Trash2], ["Upload", "Upload", Upload], ["User", "User", User],
+  ["Users", "Users", Users], ["Video", "Video", Video], ["X", "X", X], ["Zap", "Zap", Zap],
+];
+const ICON_COMPONENTS = Object.fromEntries(ICON_CHOICES.map(([name, , component]) => [name, component]));
 
 const Ico = ({ n, size = 18, ...props }) => {
   const Icon = ICONS[n];
@@ -78,6 +126,8 @@ const Btn = (text, base = {}) =>
   });
 const Box = (name, children = [], base = {}, mob = {}, tab = {}) =>
   node("container", name, { tag: "div" }, { display: "flex", flexDirection: "column", gap: "16px", width: "100%", ...base }, children, mob, tab);
+const FAQItem = (question, answer) =>
+  node("faq", "FAQ Item", { question, answer }, { borderBottom: "1px solid #e5e7eb", padding: "16px 0" });
 const Row = (name, children = [], base = {}, mob = {}) =>
   Box(name, children, { flexDirection: "row", ...base }, { flexDirection: "column", ...mob });
 const Img = (src, base = {}) =>
@@ -380,10 +430,7 @@ const SHOPIFY_COMPONENTS_2 = [
       ], { gap: "16px" }, { gap: "12px" }) },
   { key: "accordion", label: "Accordion", glyph: "list", build: () =>
       Box("Accordion", ["First question", "Second question", "Third question"].map((q) =>
-        Box("Accordion Item", [
-          Row("Header", [H(q, 18, { fontWeight: "600" }, { fontSize: "18px" }, "h3"), T("▾", { color: "#6b7280" })], { justifyContent: "space-between", alignItems: "center", cursor: "pointer" }, { flexDirection: "row" }),
-          T("Answer text goes here."),
-        ], { padding: "16px 0", borderBottom: "1px solid #e5e7eb", gap: "8px" })), { gap: "0px" }) },
+        FAQItem(q, "Answer text goes here.")), { gap: "0px" }) },
   { key: "countdown", label: "Countdown Timer", glyph: "text", build: () =>
       Row("Countdown Timer", [["19", "Hours"], ["20", "Mins"], ["45", "Secs"]].map(([n, l]) =>
         Box("Unit", [T(n, { fontSize: "36px", fontWeight: "700", color: "#2563eb", textAlign: "center", lineHeight: "1" }), T(l, { fontSize: "12px", color: "#6b7280", textAlign: "center" })],
@@ -468,7 +515,7 @@ const SHOPIFY_COMPONENTS_2 = [
 SHOPIFY_COMPONENTS_2.forEach((c) => { if (!COMPONENTS.some((x) => x.key === c.key)) COMPONENTS.push(c); });
 
 /* ----------------------------- sections ---------------------------- */
-const faq = (q, a) => Box("FAQ Item", [H(q, 18, { fontWeight: "600" }, { fontSize: "18px" }, "h3"), T(a), node("hr", "Divider", {}, { width: "100%", height: "1px", background: "#e5e7eb", border: "none" })], { gap: "8px" });
+const faq = (q, a) => FAQItem(q, a);
 
 const SECTIONS = [
   {
@@ -645,23 +692,52 @@ const fixProps = (n) => {
   if (n.type !== "slider") return props;
   return { ...SLIDER_DEFAULTS, ...props, slides: (Array.isArray(props.slides) ? props.slides : []).map(fixSlide) };
 };
-const fixNode = (n) => ({
-  ...n,
-  id: n.id || uid(),
-  type: n.type || "container",
-  name: n.name || n.type || "Layer",
-  props: fixProps(n),
-  s: { base: {}, tablet: {}, mobile: {}, hover: {}, ...(n.s || {}) },
-  hide: n.hide || {},
-  children: (Array.isArray(n.children) ? n.children : []).map(fixNode),
-});
+const fixNode = (n) => {
+  const children = Array.isArray(n.children) ? n.children : [];
+  const legacyFaqItem = n.type === "container" && n.name === "FAQ Item"
+    && children.length === 3 && children[0]?.type === "heading" && children[1]?.type === "text" && children[2]?.type === "hr";
+  const legacyAccordionItem = n.type === "container" && n.name === "Accordion Item"
+    && children.length === 2 && children[0]?.name === "Header" && children[1]?.type === "text";
+  const questionNode = n.name === "Accordion Item"
+    ? children[0]?.children?.find((child) => child.type === "heading" || child.type === "text")
+    : children[0];
+  const answerNode = n.name === "Accordion Item"
+    ? children.find((child, index) => index > 0 && child.type === "text")
+    : children[1];
+  const migrated = (legacyFaqItem || legacyAccordionItem) && questionNode?.props?.text != null && answerNode?.props?.text != null
+    ? {
+      ...n,
+      type: "faq",
+      props: { ...(n.props || {}), question: questionNode.props.text, answer: answerNode.props.text },
+      s: legacyFaqItem ? {
+        ...n.s,
+        base: {
+          ...(n.s?.base || {}),
+          borderBottom: n.s?.base?.borderBottom || `1px solid ${children[2].s?.base?.background || "#e5e7eb"}`,
+        },
+      } : n.s,
+      children: [],
+    }
+    : n;
+  const props = fixProps(migrated);
+  return {
+    ...migrated,
+    id: migrated.id || uid(),
+    type: migrated.type || "container",
+    name: migrated.name || migrated.type || "Layer",
+    props: { ...props, componentStates: Array.isArray(props.componentStates) ? props.componentStates : [] },
+    s: { base: {}, tablet: {}, mobile: {}, hover: {}, ...(migrated.s || {}) },
+    hide: migrated.hide || {},
+    children: (Array.isArray(migrated.children) ? migrated.children : []).map(fixNode),
+  };
+};
 const PAGE_ID = "__page__";
 /* the page itself behaves like a container node: it has its own styles per device */
 const pageNodeOf = (p) => ({ id: PAGE_ID, type: "container", name: "Page", props: { tag: "div" }, s: p.s, hide: {}, children: p.children });
 const fixPage = (p) => {
   const s = { base: {}, tablet: {}, mobile: {}, hover: {}, ...(p.s || {}) };
   if (!p.s) s.base = { background: p.bg || "#ffffff", fontFamily: p.font || "Inter, system-ui, sans-serif" }; // migrate old pages
-  return { name: "My page", title: "My page", ...p, s, children: (Array.isArray(p.children) ? p.children : []).map(fixNode) };
+  return { name: "My page", title: "My page", ...p, fonts: Array.isArray(p.fonts) ? p.fonts : [], s, children: (Array.isArray(p.children) ? p.children : []).map(fixNode) };
 };
 
 /* later layers win; a shorthand in a later layer cancels earlier longhands */
@@ -711,7 +787,20 @@ const SLIDER_CSS =
   ".rp-sl-dot[aria-current='true']{opacity:1}" +
   "@media(prefers-reduced-motion:reduce){.rp-sl-track{transition:none}}";
 
-const FRAME_CSS = ".rp-frame *{box-sizing:border-box}.rp-frame :where(h1,h2,h3,h4,h5,h6,p,ul,hr){margin:0}.rp-frame button{font-family:inherit}" + SLIDER_CSS;
+const ANIMATION_CSS =
+  "@keyframes rp-fade-in{from{opacity:0}to{opacity:1}}" +
+  "@keyframes rp-slide-up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}" +
+  "@keyframes rp-zoom-in{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}" +
+  "[data-animation='fade-in']{animation:rp-fade-in .35s ease both}" +
+  "[data-animation='slide-up']{animation:rp-slide-up .35s ease both}" +
+  "[data-animation='zoom-in']{animation:rp-zoom-in .35s ease both}";
+const FAQ_CSS =
+  ".rp-faq>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;list-style:none;font-size:18px;font-weight:600}" +
+  ".rp-faq>summary::-webkit-details-marker{display:none}" +
+  ".rp-faq>summary:after{content:'+';font-size:20px;line-height:1}" +
+  ".rp-faq[open]>summary:after{content:'−'}" +
+  ".rp-faq-answer{margin-top:8px;white-space:pre-wrap}";
+const FRAME_CSS = ".rp-frame *{box-sizing:border-box}.rp-frame :where(h1,h2,h3,h4,h5,h6,p,ul,hr){margin:0}.rp-frame button{font-family:inherit}" + FAQ_CSS + SLIDER_CSS + ANIMATION_CSS;
 
 /* tiny dependency-free script for the exported page (ES5 on purpose) */
 const SLIDER_JS = `(function(){
@@ -753,16 +842,70 @@ show(0);start();
 });
 })();`;
 
+const HASH_MARK_JS = `(function(){
+if(!("IntersectionObserver" in window))return;
+var nodes=document.querySelectorAll("[data-url-hash-auto]");
+var observer=new IntersectionObserver(function(entries){
+entries.forEach(function(entry){
+if(!entry.isIntersecting)return;
+var mark=entry.target.getAttribute("data-url-hash");
+if(mark)history.replaceState(null,"","#"+encodeURIComponent(mark));
+});
+},{threshold:0.1});
+nodes.forEach(function(node){observer.observe(node);});
+})();`;
+
 const cssText = (o) => Object.entries(o).map(([k, v]) => `${kebab(k)}:${v}`).join(";");
+const imageZoomScaleOf = (zoom) => Math.max(0.1, 1 + (parseFloat(zoom) || 0) / 100);
+const imageZoomPercentOf = (zoom) => `${Math.max(10, 100 + (parseFloat(zoom) || 0))}%`;
+const imageZoomDeltaOf = (percent) => `${(parseFloat(percent) || 100) - 100}%`;
+const hasImageDimension = (value) => value != null && value !== "" && value !== "auto";
+const imageFitClassesOf = (className = "") =>
+  className.split(/\s+/).filter((className) => className.split(":").pop().replace(/^!/, "").startsWith("object-")).join(" ");
+const imageZoomContentStyle = (style, scale) => ({
+  display: "block",
+  maxWidth: "100%",
+  width: hasImageDimension(style.width) || style.aspectRatio ? "100%" : "auto",
+  height: hasImageDimension(style.height) || style.aspectRatio ? "100%" : "auto",
+  ...(style.objectFit ? { objectFit: style.objectFit } : {}),
+  ...(style.objectPosition ? { objectPosition: style.objectPosition } : {}),
+  scale,
+  transformOrigin: "center",
+});
+const imageZoomContentCss = (style, scale) =>
+  cssText(imageZoomContentStyle(style, scale));
+
+const HOVER_ACTION_JS = `(function(){
+document.addEventListener("mouseover",function(event){
+var root=event.target.closest("[data-hover-action-type]");
+if(!root||root.contains(event.relatedTarget))return;
+var type=root.getAttribute("data-hover-action-type");
+var value=root.getAttribute("data-hover-action-value");
+if(!value)return;
+if(type==="link")window.open(value,root.getAttribute("data-hover-action-new-tab")==="1"?"_blank":"_self");
+if(type==="scroll"){var target=document.getElementById(value);if(target)target.scrollIntoView({behavior:"smooth"});}
+});
+})();`;
 
 function exportHTML(page) {
-  let base = "", tab = "", mob = "", hov = "", hide = "", usesTw = false, usesSlider = false;
+  let base = "", tab = "", mob = "", hov = "", hide = "", usesTw = false, usesSlider = false, usesHashMark = false, usesHoverAction = false, usesJQuery = false;
+  const customScripts = [];
   const el = (n) => {
     const cls = "n-" + n.id;
     const p = n.props;
     if (p.className) usesTw = true;
+    if (typeof p.customJs === "string" && p.customJs.trim()) {
+      customScripts.push({ selector: `.${cls}`, code: p.customJs });
+      usesJQuery = usesJQuery || !!p.loadJQuery;
+    }
     const isSlider = n.type === "slider";
     if (isSlider) usesSlider = true;
+    const zoomScale = n.type === "image" && p.zoom != null ? imageZoomScaleOf(p.zoom) : 1;
+    const zoomedImage = n.type === "image" && zoomScale !== 1;
+    const hashMark = n.type === "container" ? hashMarkValue(p.urlHashMark) : "";
+    if (hashMark && p.autoUrlHashMark) usesHashMark = true;
+    const hoverValue = p.hoverAction ? safeUrl(p.hoverAction.value) : "";
+    if (hoverValue && ["link", "scroll"].includes(p.hoverAction.type)) usesHoverAction = true;
     const pre =
       (n.s.base.minWidth == null ? "min-width:0;" : "") +
       (n.type === "text" && !n.s.base.whiteSpace ? "white-space:pre-wrap;" : "") +
@@ -770,10 +913,25 @@ function exportHTML(page) {
       (isSlider && n.s.base.position == null ? "position:relative;" : "") +
       (isSlider && n.s.base.overflow == null ? "overflow:hidden;" : "") +
       (isSlider && n.s.base.height == null && n.s.base.aspectRatio == null ? "aspect-ratio:16/9;" : "") +
+      (hashMark && p.urlHashMarkOffset ? `scroll-margin-top:${Math.max(0, parseFloat(p.urlHashMarkOffset) || 0)}px;` : "") +
       (Object.keys(n.s.hover).length && !n.s.base.transition ? "transition:all .15s ease;" : "");
     base += `.${cls}{${pre}${cssText(n.s.base)}}`;
     if (Object.keys(n.s.tablet).length) tab += `.${cls}{${cssText(n.s.tablet)}}`;
     if (Object.keys(n.s.mobile).length) mob += `.${cls}{${cssText(n.s.mobile)}}`;
+    if (zoomedImage) {
+      base += `.${cls}{overflow:hidden;display:${n.s.base.display || "inline-block"};width:${hasImageDimension(n.s.base.width) ? n.s.base.width : "fit-content"}}`;
+      base += `.${cls}>img{${imageZoomContentCss(resolveStyle(n, "desktop", false), zoomScale)}}`;
+      if (Object.keys(n.s.tablet).length) {
+        const tabletStyle = resolveStyle(n, "tablet", false);
+        tab += `.${cls}{overflow:hidden;display:${tabletStyle.display || "inline-block"};width:${hasImageDimension(tabletStyle.width) ? tabletStyle.width : "fit-content"}}`;
+        tab += `.${cls}>img{${imageZoomContentCss(tabletStyle, zoomScale)}}`;
+      }
+      if (Object.keys(n.s.mobile).length) {
+        const mobileStyle = resolveStyle(n, "mobile", false);
+        mob += `.${cls}{overflow:hidden;display:${mobileStyle.display || "inline-block"};width:${hasImageDimension(mobileStyle.width) ? mobileStyle.width : "fit-content"}}`;
+        mob += `.${cls}>img{${imageZoomContentCss(mobileStyle, zoomScale)}}`;
+      }
+    }
     if (Object.keys(n.s.hover).length) hov += `.${cls}:hover{${cssText(n.s.hover)}}`;
     if (isSlider) {
       base += `.${cls}{--sl-pv:${perViewOf(p, "desktop")};--sl-gap:${Math.max(0, parseInt(p.gap, 10) || 0)}px}.${cls}>.rp-sl-sizer{padding-top:${ratioPct(n.s.base.aspectRatio)}%}`;
@@ -783,24 +941,41 @@ function exportHTML(page) {
     if (n.hide.desktop) hide += `@media(min-width:1025px){.${cls}{display:none!important}}`;
     if (n.hide.tablet) hide += `@media(min-width:481px) and (max-width:1024px){.${cls}{display:none!important}}`;
     if (n.hide.mobile) hide += `@media(max-width:480px){.${cls}{display:none!important}}`;
-    let a = ` class="${cls}${p.className ? " " + esc(p.className) : ""}"`;
-    if (p.htmlId) a += ` id="${esc(p.htmlId)}"`;
+    let a = ` class="${cls}${n.type === "faq" ? " rp-faq" : ""}${p.className ? " " + esc(p.className) : ""}"`;
+    if (p.htmlId || hashMark) a += ` id="${esc(p.htmlId || hashMark)}"`;
     if (p.ariaLabel) a += ` aria-label="${esc(p.ariaLabel)}"`;
     if (p.role) a += ` role="${esc(p.role)}"`;
     if (p.title) a += ` title="${esc(p.title)}"`;
+    for (const [key, value] of dataAttrsOf(p.dataset)) a += ` ${key}="${esc(value)}"`;
+    if (hashMark) a += ` data-url-hash="${esc(hashMark)}"${p.autoUrlHashMark ? " data-url-hash-auto" : ""}`;
+    if (p.animation && ["fade-in", "slide-up", "zoom-in"].includes(p.animation)) a += ` data-animation="${p.animation}"`;
+    if (hoverValue && ["link", "scroll"].includes(p.hoverAction.type)) {
+      a += ` data-hover-action-type="${p.hoverAction.type}" data-hover-action-value="${esc(hoverValue)}" data-hover-action-new-tab="${p.hoverAction.newTab ? "1" : "0"}"`;
+    }
     const act = p.action;
     const val = act ? safeUrl(act.value) : "";
     if (act && act.type === "link" && val) a += ` onclick="${esc(`window.open(${JSON.stringify(val)},${act.newTab ? '"_blank"' : '"_self"'})`)}" style="cursor:pointer"`;
     if (act && act.type === "scroll" && val) a += ` onclick="${esc(`document.getElementById(${JSON.stringify(val)})?.scrollIntoView({behavior:'smooth'})`)}" style="cursor:pointer"`;
     switch (n.type) {
-      case "image": return `<img${a} src="${esc(p.src)}" alt="${esc(p.alt)}">`;
+      case "image": {
+        const fitClass = imageFitClassesOf(p.className);
+        const image = `<img${fitClass ? ` class="${esc(fitClass)}"` : ""} src="${esc(p.src)}" alt="${esc(p.alt)}">`;
+        return zoomedImage ? `<span${a}>${image}</span>` : `<img${a} src="${esc(p.src)}" alt="${esc(p.alt)}">`;
+      }
+      case "faq": return `<details${a}><summary>${esc(p.question || "Question")}</summary><div class="rp-faq-answer">${esc(p.answer || "")}</div></details>`;
       case "hr": return `<hr${a}>`;
       case "list": return `<ul${a}>${(p.items || []).map((t) => `<li>${esc(t)}</li>`).join("")}</ul>`;
       case "stars": { const r = Math.round(Math.max(0, Math.min(5, +p.rating || 0))); return `<div${a}>${"★".repeat(r)}${"☆".repeat(5 - r)}</div>`; }
-      case "text": return `<p${a}>${esc(p.text)}</p>`;
-      case "heading": return `<${p.tag || "h2"}${a}>${esc(p.text)}</${p.tag || "h2"}>`;
+      case "text": { const tag = safeTextTag(p.tag); return `<${tag}${a}>${esc(p.text)}</${tag}>`; }
+      case "heading": { const tag = safeHeadingTag(p.tag); return `<${tag}${a}>${esc(p.text)}</${tag}>`; }
       case "button": return `<button${a}>${esc(p.text)}</button>`;
-      case "icon": return `<span${a}>${esc(p.text)}</span>`;
+      case "icon": {
+        const Icon = ICON_COMPONENTS[p.iconName];
+        const content = Icon
+          ? renderToStaticMarkup(React.createElement(Icon, { size: "1em", strokeWidth: 1.8, "aria-hidden": true }))
+          : esc(p.text);
+        return `<span${a}>${content}</span>`;
+      }
       case "slider": {
         const slides = Array.isArray(p.slides) ? p.slides : [];
         const multi = slides.length > 1;
@@ -825,7 +1000,12 @@ function exportHTML(page) {
     }
   };
   const body = page.children.map(el).join("\n");
+  const customJsCode = customScripts.map(({ selector, code }) =>
+    `(function(root){if(!root)return;\n${code}\n})(document.querySelector(${JSON.stringify(selector)}));`
+  ).join("\n");
+  const safeCustomJsCode = customJsCode.replace(/<\/script/gi, "<\\/script");
   const ps = page.s || { base: {}, tablet: {}, mobile: {}, hover: {} };
+  const gFonts = googleUsed(page);
   base = `.n-page{${cssText(ps.base)}}` + base;
   if (Object.keys(ps.tablet).length) tab = `.n-page{${cssText(ps.tablet)}}` + tab;
   if (Object.keys(ps.mobile).length) mob = `.n-page{${cssText(ps.mobile)}}` + mob;
@@ -836,8 +1016,14 @@ function exportHTML(page) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(page.title || page.name)}</title>
-${usesTw ? '<script src="https://cdn.tailwindcss.com"></script>\n' : ""}<style>
+${usesTw ? '<script src="https://cdn.tailwindcss.com"></script>\n' : ""}${gFonts.length ? `<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="${esc(gfUrl(gFonts))}">
+` : ""}<style>
 ${RESET}
+${customFontCss(page.fonts)}
+${FAQ_CSS}
+${ANIMATION_CSS}
 ${usesSlider ? SLIDER_CSS : ""}
 body{margin:0;background:${ps.base.background || "#ffffff"};font-family:${ps.base.fontFamily || "system-ui,sans-serif"}}
 ${base}
@@ -851,12 +1037,28 @@ ${hide}
 <div class="n-page">
 ${body}
 </div>
-${usesSlider ? `<script>\n${SLIDER_JS}\n</script>\n` : ""}</body>
+${usesSlider ? `<script>\n${SLIDER_JS}\n</script>\n` : ""}${usesHashMark ? `<script>\n${HASH_MARK_JS}\n</script>\n` : ""}${usesHoverAction ? `<script>\n${HOVER_ACTION_JS}\n</script>\n` : ""}${usesJQuery ? '<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>\n' : ""}${customJsCode ? `<script>\n${safeCustomJsCode}\n</script>\n` : ""}</body>
 </html>`;
 }
 
 /* ------------------------------ context ---------------------------- */
 const Ctx = createContext({ preview: false });
+
+function FAQItemView({ n, common, preview }) {
+  const [open, setOpen] = useState(!preview);
+  useEffect(() => setOpen(!preview), [preview]);
+  return (
+    <details
+      {...common}
+      className={[common.className, "rp-faq"].filter(Boolean).join(" ")}
+      open={open}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+    >
+      <summary>{n.props.question || "Question"}</summary>
+      <div className="rp-faq-answer">{n.props.answer || ""}</div>
+    </details>
+  );
+}
 
 /* ------------------------------ slider view ------------------------ */
 function SliderView({ n, common, preview, device }) {
@@ -954,6 +1156,9 @@ function SliderView({ n, common, preview, device }) {
 function Render({ n, device, isPageSection = false }) {
   const c = useContext(Ctx);
   const [hov, setHov] = useState(false);
+  const p = n.props;
+  const hashMark = n.type === "container" ? hashMarkValue(p.urlHashMark) : "";
+  const hashRef = useRef(null);
   const isInlineEditing = !c.preview
     && c.inlineEdit?.id === n.id
     && c.inlineEdit.type !== "image"
@@ -966,12 +1171,25 @@ function Render({ n, device, isPageSection = false }) {
     input.style.height = "auto";
     input.style.height = `${input.scrollHeight}px`;
   }, [isInlineEditing]);
+  useEffect(() => {
+    const element = hashRef.current;
+    if (!c.preview || !p.autoUrlHashMark || !hashMark || !element || typeof IntersectionObserver === "undefined") return undefined;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) window.history.replaceState(null, "", `#${encodeURIComponent(hashMark)}`);
+    }, { threshold: 0.1 });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [c.preview, p.autoUrlHashMark, hashMark]);
   if (n.hide[device]) return null;
 
   const isSel = !c.preview && c.selectedId === n.id && c.activeDevice === device;
   const hoverOn = (c.preview && hov) || (isSel && c.stateTab === "hover");
-  const st = { ...resolveStyle(n, device, hoverOn) };
-  const p = n.props;
+  const customStateKey = c.activeNodeState && c.activeNodeState !== "default" ? `state:${c.activeNodeState}` : "";
+  const st = {
+    ...resolveStyle(n, device, hoverOn),
+    ...(isSel && customStateKey ? n.s[customStateKey] || {} : {}),
+  };
+  if (hashMark && p.urlHashMarkOffset) st.scrollMarginTop = `${Math.max(0, parseFloat(p.urlHashMarkOffset) || 0)}px`;
   const empty = n.type === "container" && n.children.length === 0;
   if (isPageSection && !c.preview && c.draggingSection) st.cursor = "grabbing";
 
@@ -998,23 +1216,31 @@ function Render({ n, device, isPageSection = false }) {
     if (empty && !st.minHeight) st.minHeight = "56px";
   }
 
+  const runAction = (action) => {
+    const val = action ? safeUrl(action.value) : "";
+    if (!action || action.type === "none" || !val) return;
+    if (action.type === "link") window.open(val, action.newTab ? "_blank" : "_self");
+    if (action.type === "scroll") document.getElementById(val)?.scrollIntoView({ behavior: "smooth" });
+  };
   const onClick = (e) => {
     if (!c.preview) { e.stopPropagation(); c.select(n.id, device); return; }
-    const a = p.action;
-    const val = a ? safeUrl(a.value) : "";
-    if (!a || a.type === "none" || !val) return;
+    if (!p.action || p.action.type === "none" || !safeUrl(p.action.value)) return;
     e.stopPropagation();
-    if (a.type === "link") window.open(val, a.newTab ? "_blank" : "_self");
-    if (a.type === "scroll") document.getElementById(val)?.scrollIntoView({ behavior: "smooth" });
+    runAction(p.action);
   };
 
   const common = {
     style: st,
     className: p.className || undefined,
-    id: p.htmlId || undefined,
+    id: p.htmlId || hashMark || undefined,
     title: p.title || undefined,
     role: p.role || undefined,
     "aria-label": p.ariaLabel || undefined,
+    ref: hashMark ? hashRef : undefined,
+    ...Object.fromEntries(dataAttrsOf(p.dataset)),
+    "data-url-hash": hashMark || undefined,
+    "data-url-hash-auto": hashMark && p.autoUrlHashMark ? "" : undefined,
+    "data-animation": ["fade-in", "slide-up", "zoom-in"].includes(p.animation) ? p.animation : undefined,
     "data-node": n.id,
     "data-page-section": isPageSection ? "true" : undefined,
     onClick,
@@ -1047,7 +1273,10 @@ function Render({ n, device, isPageSection = false }) {
       }
       if (e.dataTransfer.types.includes("text/x-asset")) c.dropAsset(e, n.id);
     },
-    onMouseEnter: () => setHov(true),
+    onMouseEnter: () => {
+      setHov(true);
+      if (c.preview) runAction(p.hoverAction);
+    },
     onMouseLeave: () => setHov(false),
   };
   const inlineInput = isInlineEditing ? (
@@ -1117,20 +1346,44 @@ function Render({ n, device, isPageSection = false }) {
   ) : null;
 
   switch (n.type) {
-    case "image": return <img {...common} src={p.src} alt={p.alt || ""} />;
+    case "image": {
+      const zoomScale = p.zoom != null ? imageZoomScaleOf(p.zoom) : 1;
+      if (zoomScale === 1) return <img {...common} src={p.src} alt={p.alt || ""} />;
+      const frameStyle = {
+        ...st,
+        overflow: "hidden",
+        display: st.display || "inline-block",
+        width: hasImageDimension(st.width) ? st.width : "fit-content",
+      };
+      return (
+        <div {...common} style={frameStyle}>
+          <img
+            className={imageFitClassesOf(p.className) || undefined}
+            src={p.src}
+            alt={p.alt || ""}
+            draggable={false}
+            style={imageZoomContentStyle(st, zoomScale)}
+          />
+        </div>
+      );
+    }
     case "hr": return <hr {...common} />;
     case "list": return <ul {...common}>{(p.items || []).map((t, i) => <li key={i}>{t}</li>)}</ul>;
     case "stars": {
       const r = Math.round(Math.max(0, Math.min(5, +p.rating || 0)));
       return <div {...common}>{"★".repeat(r) + "☆".repeat(5 - r)}</div>;
     }
+    case "faq": return <FAQItemView n={n} common={common} preview={!!c.preview} />;
     case "slider": return <SliderView n={n} common={common} preview={!!c.preview} device={device} />;
-    case "text": return <p {...common}>{inlineInput || p.text}</p>;
-    case "heading": return React.createElement(p.tag || "h2", common, inlineInput || p.text);
+    case "text": return React.createElement(safeTextTag(p.tag), common, inlineInput || p.text);
+    case "heading": return React.createElement(safeHeadingTag(p.tag), common, inlineInput || p.text);
     case "button": return c.thumbnail
       ? <div style={st} className={p.className || undefined}>{p.text}</div>
       : <button type="button" {...common}>{inlineInput || p.text}</button>;
-    case "icon": return <span {...common}>{inlineInput || p.text}</span>;
+    case "icon": {
+      const Icon = ICON_COMPONENTS[p.iconName];
+      return <span {...common}>{Icon ? React.createElement(Icon, { size: "1em", strokeWidth: 1.8, "aria-hidden": true }) : inlineInput || p.text}</span>;
+    }
     default: {
       const dropProps = c.preview ? {} : {
         onDragOver: (e) => {
@@ -1167,12 +1420,15 @@ function Render({ n, device, isPageSection = false }) {
 }
 
 /* --------------------------- small UI parts ------------------------ */
-const Section = ({ title, children, open, onToggle }) => {
+const Section = ({ title, children, open, onToggle, onAdd }) => {
   return (
     <div className="border-b border-gray-100 py-3">
-      <button type="button" aria-expanded={open} onClick={onToggle} className="flex w-full items-center gap-1 text-left text-[13px] font-semibold text-gray-800">
-        <span className="flex w-3 text-gray-400"><Ico n={open ? "down" : "right"} size={13} /></span>{title}
-      </button>
+      <div className="flex items-center gap-1">
+        <button type="button" aria-expanded={open} onClick={onToggle} className="flex min-w-0 flex-1 items-center gap-1 text-left text-[13px] font-semibold text-gray-800">
+          <span className="flex w-3 text-gray-400"><Ico n={open ? "down" : "right"} size={13} /></span>{title}
+        </button>
+        {onAdd && <button type="button" aria-label={`Add ${title}`} onClick={onAdd} className="rounded p-0.5 text-gray-500 hover:bg-gray-100 hover:text-gray-900"><Ico n="plus" size={14} /></button>}
+      </div>
       {open && <div className="mt-3 space-y-3">{children}</div>}
     </div>
   );
@@ -1239,6 +1495,130 @@ const Sel = ({ value, options, onChange }) => (
     {options.map((o) => <option key={o} value={o}>{o || "—"}</option>)}
   </select>
 );
+const IconPicker = ({ value, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [position, setPosition] = useState(null);
+  const triggerRef = useRef(null);
+  const selected = ICON_CHOICES.find(([name]) => name === value);
+  const filtered = ICON_CHOICES.filter(([name, label]) =>
+    `${label} ${name}`.toLowerCase().includes(query.trim().toLowerCase())
+  );
+  const SelectedIcon = selected && selected[2];
+  const toggle = () => {
+    if (open) { setOpen(false); return; }
+    const bounds = triggerRef.current.getBoundingClientRect();
+    const width = Math.min(280, window.innerWidth - 16);
+    const height = Math.min(420, window.innerHeight - 16);
+    const top = bounds.bottom + height + 8 < window.innerHeight
+      ? bounds.bottom + 8
+      : Math.max(8, bounds.top - height - 8);
+    setPosition({ left: Math.max(8, Math.min(bounds.left, window.innerWidth - width - 8)), top, width, height });
+    setOpen(true);
+    setQuery("");
+  };
+
+  return (
+    <div>
+      <button ref={triggerRef} type="button" aria-haspopup="dialog" aria-expanded={open} onClick={toggle}
+        className="flex w-full items-center gap-2 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-left text-xs hover:bg-gray-50">
+        {SelectedIcon ? React.createElement(SelectedIcon, { size: 16, "aria-hidden": true }) : <Search size={16} aria-hidden="true" />}
+        <span className="min-w-0 flex-1 truncate">{selected ? selected[1] : "Choose icon"}</span>
+        <ChevronDown size={13} aria-hidden="true" />
+      </button>
+      {open && position && createPortal(
+        <>
+          <div className="fixed inset-0" style={{ zIndex: 79 }} onClick={() => setOpen(false)} />
+          <div role="dialog" aria-label="Choose icon" className="fixed flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl"
+            style={{ left: position.left, top: position.top, width: position.width, maxHeight: position.height, zIndex: 80 }}>
+            <div className="border-b border-gray-100 p-2">
+              <div className="flex items-center gap-2 rounded-md border border-gray-200 px-2">
+                <Search size={15} className="shrink-0 text-gray-400" aria-hidden="true" />
+                <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
+                  placeholder="Search icons..." aria-label="Search icons" className="min-w-0 flex-1 py-2 text-xs outline-none" />
+              </div>
+            </div>
+            <div role="listbox" aria-label="Icons" className="min-h-0 overflow-y-auto p-1">
+              {filtered.map(([name, label, Icon]) => (
+                <button key={name} type="button" role="option" aria-selected={value === name} onClick={() => { onChange(name); setOpen(false); }}
+                  className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs ${value === name ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`}>
+                  {React.createElement(Icon, { size: 16, "aria-hidden": true })}
+                  <span>{label}</span>
+                </button>
+              ))}
+              {!filtered.length && <div className="px-3 py-5 text-center text-xs text-gray-500">No icons found</div>}
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+    </div>
+  );
+};
+const ImageZoomSelect = ({ value, presets = [], onChange, onAddPreset }) => {
+  const [addingCustom, setAddingCustom] = useState(false);
+  const [customValue, setCustomValue] = useState(String(parseFloat(imageZoomPercentOf(value)) || 100));
+  const currentValue = imageZoomPercentOf(value);
+  const validPreset = (preset) => {
+    const number = parseFloat(preset);
+    return Number.isFinite(number) && number >= 10 ? `${number}%` : null;
+  };
+  const options = [...new Set(["100%", "110%", "120%", ...presets.map(validPreset).filter(Boolean), validPreset(currentValue)].filter(Boolean))];
+  const customPreset = validPreset(`${customValue}%`);
+
+  return (
+    <div className="space-y-1">
+      <select value={addingCustom ? "__custom__" : currentValue} onChange={(e) => {
+        if (e.target.value === "__custom__") {
+          setCustomValue(String(parseFloat(currentValue) || 100));
+          setAddingCustom(true);
+          return;
+        }
+        setAddingCustom(false);
+        onChange(e.target.value);
+      }} className="w-full rounded-md border border-gray-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-blue-500">
+        {options.map((option) => <option key={option} value={option}>{option === "100%" ? "Reset (100%)" : option}</option>)}
+        <option value="__custom__">Add custom…</option>
+      </select>
+      {addingCustom && (
+        <div className="flex gap-1">
+          <input type="number" min="10" step="1" value={customValue} aria-label="Custom image zoom percentage" onChange={(e) => setCustomValue(e.target.value)}
+            className="min-w-0 flex-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500" />
+          <button type="button" disabled={!customPreset} onClick={() => {
+            onAddPreset(customPreset);
+            setAddingCustom(false);
+          }} className="rounded-md border border-gray-200 px-2 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40">Add</button>
+        </div>
+      )}
+    </div>
+  );
+};
+const BorderWidthSelect = ({ value, onChange }) => {
+  const [customOpen, setCustomOpen] = useState(false);
+  const options = ["1px", "2px", "3px", "5px", "10px"];
+  const currentValue = value || "1px";
+  const isPreset = options.includes(currentValue);
+  const selectedValue = customOpen || !isPreset ? "__custom__" : currentValue;
+
+  return (
+    <div className="space-y-1">
+      <select value={selectedValue} onChange={(e) => {
+        if (e.target.value === "__custom__") {
+          setCustomOpen(true);
+          return;
+        }
+        setCustomOpen(false);
+        onChange(e.target.value);
+      }} className="w-full rounded-md border border-gray-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-blue-500">
+        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+        <option value="__custom__">Custom…</option>
+      </select>
+      {selectedValue === "__custom__" && (
+        <StepInp value={value} onChange={onChange} placeholder="e.g. 12px" step={1} defaultUnit="px" label="custom border width" />
+      )}
+    </div>
+  );
+};
 const Area = ({ value, onChange, rows = 3, autoFocus = false }) => (
   <textarea rows={rows} value={value ?? ""} autoFocus={autoFocus} onChange={(e) => onChange(e.target.value)}
     className="w-full resize-y rounded-md border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500" />
@@ -1248,12 +1628,166 @@ const Toggle = ({ label, checked, onChange }) => (
     <input type="checkbox" checked={!!checked} onChange={(e) => onChange(e.target.checked)} />{label}
   </label>
 );
-const Color = ({ value, onChange }) => (
-  <div className="flex gap-1.5">
-    <input type="color" value={/^#[0-9a-f]{6}$/i.test(value || "") ? value : "#000000"} onChange={(e) => onChange(e.target.value)} className="h-6 w-8 shrink-0 cursor-pointer rounded border border-gray-200 bg-white p-0" />
-    <Inp value={value} onChange={onChange} placeholder="none" />
-  </div>
-);
+const parseCssColor = (value) => {
+  const text = String(value || "").trim();
+  if (text.toLowerCase() === "transparent") return { r: 0, g: 0, b: 0, a: 0 };
+  const hex = /^#([\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i.exec(text);
+  if (hex) {
+    let digits = hex[1];
+    if (digits.length < 5) digits = [...digits].map((digit) => digit + digit).join("");
+    const hasAlpha = digits.length === 8;
+    return {
+      r: parseInt(digits.slice(0, 2), 16),
+      g: parseInt(digits.slice(2, 4), 16),
+      b: parseInt(digits.slice(4, 6), 16),
+      a: hasAlpha ? parseInt(digits.slice(6, 8), 16) / 255 : 1,
+    };
+  }
+  const functional = /^(rgba?|hsla?)\((.*)\)$/i.exec(text);
+  if (!functional) return null;
+  const isHsl = functional[1].toLowerCase().startsWith("hsl");
+  const pieces = functional[2].split("/");
+  const channels = pieces[0].includes(",") ? pieces[0].split(",").map((part) => part.trim()) : pieces[0].trim().split(/\s+/);
+  let alphaValue = pieces[1]?.trim();
+  if (!alphaValue && channels.length === 4) alphaValue = channels.pop();
+  if (channels.length !== 3) return null;
+  const alpha = alphaValue ? (alphaValue.endsWith("%") ? parseFloat(alphaValue) / 100 : parseFloat(alphaValue)) : 1;
+  if (!Number.isFinite(alpha)) return null;
+  const a = Math.max(0, Math.min(1, alpha));
+
+  if (isHsl) {
+    let h = parseFloat(channels[0]);
+    const unit = /(?:deg|rad|turn)$/i.exec(channels[0])?.[0]?.toLowerCase();
+    if (unit === "rad") h = h * 180 / Math.PI;
+    if (unit === "turn") h *= 360;
+    const s = parseFloat(channels[1]) / 100;
+    const l = parseFloat(channels[2]) / 100;
+    if (![h, s, l].every(Number.isFinite)) return null;
+    const hue = ((h % 360) + 360) % 360 / 360;
+    const saturation = Math.max(0, Math.min(1, s));
+    const lightness = Math.max(0, Math.min(1, l));
+    const hueToChannel = (p, q, t) => {
+      let x = t;
+      if (x < 0) x += 1;
+      if (x > 1) x -= 1;
+      if (x < 1 / 6) return p + (q - p) * 6 * x;
+      if (x < 1 / 2) return q;
+      if (x < 2 / 3) return p + (q - p) * (2 / 3 - x) * 6;
+      return p;
+    };
+    if (saturation === 0) {
+      const gray = Math.round(lightness * 255);
+      return { r: gray, g: gray, b: gray, a };
+    }
+    const q = lightness < 0.5 ? lightness * (1 + saturation) : lightness + saturation - lightness * saturation;
+    const p = 2 * lightness - q;
+    return {
+      r: Math.round(hueToChannel(p, q, hue + 1 / 3) * 255),
+      g: Math.round(hueToChannel(p, q, hue) * 255),
+      b: Math.round(hueToChannel(p, q, hue - 1 / 3) * 255),
+      a,
+    };
+  }
+
+  const rgb = channels.map((channel) => {
+    const number = parseFloat(channel);
+    return channel.endsWith("%") ? Math.round(number * 2.55) : Math.round(number);
+  });
+  if (!rgb.every(Number.isFinite)) return null;
+  return { r: Math.max(0, Math.min(255, rgb[0])), g: Math.max(0, Math.min(255, rgb[1])), b: Math.max(0, Math.min(255, rgb[2])), a };
+};
+const rgbToHex = ({ r, g, b }) => "#" + [r, g, b].map((channel) => channel.toString(16).padStart(2, "0")).join("");
+const Color = ({ value, onChange, placeholder = "none" }) => {
+  const parsed = parseCssColor(value);
+  const alpha = parsed ? Math.round(parsed.a * 100) : 100;
+  const setAlpha = (percent) => {
+    if (!parsed) return;
+    onChange(`rgba(${parsed.r}, ${parsed.g}, ${parsed.b}, ${(Number(percent) / 100).toFixed(2)})`);
+  };
+  return (
+    <div className="w-full space-y-1">
+      <div className="flex gap-1.5">
+        <input type="color" aria-label="Choose base color" value={parsed ? rgbToHex(parsed) : "#000000"}
+          onChange={(e) => onChange(alpha < 100 ? `rgba(${parseInt(e.target.value.slice(1, 3), 16)}, ${parseInt(e.target.value.slice(3, 5), 16)}, ${parseInt(e.target.value.slice(5, 7), 16)}, ${(alpha / 100).toFixed(2)})` : e.target.value)}
+          className="h-6 w-8 shrink-0 cursor-pointer rounded border border-gray-200 bg-white p-0" />
+        <Inp value={value} onChange={onChange} placeholder={placeholder} />
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="w-10 shrink-0 text-[11px] text-gray-500">Alpha</span>
+        <input type="range" min="0" max="100" step="1" value={alpha}
+          disabled={!parsed} aria-label="Color alpha" onChange={(e) => setAlpha(e.target.value)}
+          className="min-w-0 flex-1 accent-blue-600 disabled:opacity-40" />
+        <span className="w-8 text-right text-[11px] text-gray-500">{parsed ? `${alpha}%` : "—"}</span>
+      </div>
+    </div>
+  );
+};
+const DEFAULT_LINEAR_GRADIENT = "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)";
+const splitGradientStops = (value) => {
+  const stops = [];
+  let depth = 0, start = 0;
+  for (let i = 0; i < value.length; i++) {
+    if (value[i] === "(") depth++;
+    else if (value[i] === ")") depth--;
+    else if (value[i] === "," && depth === 0) {
+      stops.push(value.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  stops.push(value.slice(start).trim());
+  return stops;
+};
+const gradientStop = (value) => {
+  const match = /^(.*?)(?:\s+(-?(?:\d+\.?\d*|\.\d+)%))?$/.exec(value.trim());
+  return { color: match?.[1] || "#000000", position: match?.[2] || "" };
+};
+const parseLinearGradient = (value) => {
+  const match = /^linear-gradient\((.*)\)$/i.exec(String(value || "").trim());
+  if (!match) return { angle: "90deg", start: "#2563eb", startPosition: "0%", end: "#7c3aed", endPosition: "100%" };
+  const parts = splitGradientStops(match[1]);
+  const angle = parts.length > 2 || /^(?:to\s|[-\d.]+(?:deg|rad|turn)$)/i.test(parts[0]) ? parts.shift() : "180deg";
+  const start = gradientStop(parts[0] || "#2563eb 0%");
+  const end = gradientStop(parts[parts.length - 1] || "#7c3aed 100%");
+  return {
+    angle, start: start.color, startPosition: start.position || "0%",
+    end: end.color, endPosition: end.position || "100%",
+  };
+};
+function LinearGradientEditor({ value, onChange }) {
+  const gradient = parseLinearGradient(value);
+  const update = (patch) => {
+    const next = { ...gradient, ...patch };
+    onChange(`linear-gradient(${next.angle}, ${next.start} ${next.startPosition}, ${next.end} ${next.endPosition})`);
+  };
+  const angles = ["0deg", "45deg", "90deg", "135deg", "180deg", "225deg", "270deg", "315deg", "to right", "to bottom"];
+  return (
+    <div className="space-y-2 rounded-md bg-gray-50 p-2">
+      <Field label="Angle">
+        <Sel value={angles.includes(gradient.angle) ? gradient.angle : "custom"} options={[...angles, "custom"]} onChange={(angle) => {
+          update({ angle: angle === "custom" ? (angles.includes(gradient.angle) ? "30deg" : gradient.angle) : angle });
+        }} />
+      </Field>
+      {!angles.includes(gradient.angle) && (
+        <Field label="Custom angle"><Inp value={gradient.angle} onChange={(angle) => update({ angle })} placeholder="e.g. 30deg or to left" /></Field>
+      )}
+      <Field label="Start"><Color value={gradient.start} onChange={(start) => update({ start })} /></Field>
+      <Field label="End"><Color value={gradient.end} onChange={(end) => update({ end })} /></Field>
+    </div>
+  );
+}
+const IMAGE_POSITIONS = ["center", "top", "right", "bottom", "left", "top left", "top right", "bottom left", "bottom right"];
+function ImagePositionControl({ value, onChange }) {
+  const position = value || "center";
+  const custom = !IMAGE_POSITIONS.includes(position);
+  return (
+    <div className="space-y-1">
+      <Sel value={custom ? "custom" : position} options={[...IMAGE_POSITIONS, "custom"]} onChange={(next) => {
+        onChange(next === "custom" ? (custom ? position : "50% 50%") : next);
+      }} />
+      {custom && <Inp value={position} onChange={onChange} placeholder="e.g. 50% 30%" />}
+    </div>
+  );
+}
 const Mini = ({ value, onChange, label }) => (
   <StepInp value={value} onChange={onChange} placeholder="0px" step={1} defaultUnit="px" compact label={label} />
 );
@@ -1304,10 +1838,32 @@ function LayerItem({ n, depth, api, selectedId }) {
   const [open, setOpen] = useState(true);
   const [edit, setEdit] = useState(false);
   const sel = selectedId === n.id;
+  const dropTarget = api.layerDropTarget?.id === n.id ? api.layerDropTarget : null;
+  const dropMode = (e) => {
+    const bounds = e.currentTarget.getBoundingClientRect();
+    const offset = (e.clientY - bounds.top) / Math.max(bounds.height, 1);
+    if (n.type === "container" && offset >= 0.25 && offset <= 0.75) return "inside";
+    return offset < 0.5 ? "before" : "after";
+  };
   const glyph = { container: "container", text: "text", heading: "heading", button: "button", image: "image", slider: "slider", list: "list", hr: "divider", stars: "rating", circle: "circle", icon: "icon" }[n.type];
   return (
     <div>
-      <div onClick={() => api.select(n.id)} className={`group flex cursor-pointer items-center gap-1 rounded-md py-1 pr-1 text-xs ${sel ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`} style={{ paddingLeft: 4 + depth * 14 }}>
+      <div data-layer-id={n.id} draggable={!edit}
+        onDragStart={(e) => {
+          e.stopPropagation();
+          e.dataTransfer.setData("text/x-move", n.id);
+          e.dataTransfer.effectAllowed = "move";
+          api.startMove(n.id);
+        }}
+        onDragEnd={api.endMove}
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes("text/x-move")) return;
+          api.hintLayerDrop(e, n.id, dropMode(e));
+        }}
+        onDrop={(e) => api.dropLayer(e, n.id, dropMode(e))}
+        onClick={() => api.select(n.id)}
+        className={`group flex cursor-pointer items-center gap-1 rounded-md py-1 pr-1 text-xs ${dropTarget ? "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-400" : sel ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`}
+        style={{ paddingLeft: 4 + depth * 14 }}>
         <button onClick={(e) => { e.stopPropagation(); setOpen(!open); }} className={`flex w-4 items-center justify-center text-gray-400 ${n.children.length ? "" : "invisible"}`}><Ico n={open ? "down" : "right"} size={13} /></button>
         <span className="flex w-4 justify-center text-gray-400"><Ico n={glyph} size={14} /></span>
         {edit ? (
@@ -1336,6 +1892,134 @@ const SearchBox = ({ value, onChange, placeholder }) => (
     <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full bg-transparent text-xs text-gray-800 outline-none" />
   </div>
 );
+
+const GOOGLE_FONTS = `ABeeZee, ADLaM Display, AR One Sans, Abel, Abhaya Libre, Aboreto, Abril Fatface, Abyssinica SIL, Aclonica, Acme, Actor, Adamina, Advent Pro, Afacad, Agbalumo, Agdasima, Aguafina Script, Akatab, Akaya Kanadaka, Akshar, Aladin, Alata, Alatsi, Albert Sans, Aldrich, Alef, Alegreya, Alegreya SC, Alegreya Sans, Alex Brush, Alfa Slab One, Alice, Alike, Allan, Allerta, Allura, Almarai, Almendra, Alumni Sans, Amaranth, Amatic SC, Amethysta, Amiri, Amita, Anaheim, Andada Pro, Andika, Anek Devanagari, Angkor, Annie Use Your Telescope, Anonymous Pro, Antic, Anton, Antonio, Anuphan, Anybody, Aoboshi One, Arapey, Archivo, Archivo Black, Archivo Narrow, Are You Serious, Arima, Arimo, Armata, Arsenal, Artifika, Arvo, Arya, Asap, Asap Condensed, Asset, Assistant, Astloch, Asul, Athiti, Atkinson Hyperlegible, Atma, Atomic Age, Aubrey, Audiowide, Autour One, Average, Average Sans, Averia Libre, Averia Sans Libre, Averia Serif Libre, B612, Babylonica, Bad Script, Bahiana, Bahianita, Bai Jamjuree, Ballet, Baloo 2, Bangers, Barlow, Barlow Condensed, Barlow Semi Condensed, Barriecito, Barrio, Basic, Baskervville, Battambang, Be Vietnam Pro, Beau Rivage, Bebas Neue, Belgrano, Bellefair, Belleza, Bellota, BenchNine, Bentham, Berkshire Swash, Besley, Beth Ellen, Bevan, Big Shoulders Display, Bigelow Rules, Bigshot One, Bilbo, Biryani, Bitter, Black And White Picture, Black Han Sans, Black Ops One, Blaka, Bodoni Moda, Bokor, Bona Nova, Bonbon, Boogaloo, Bowlby One, Brawler, Bree Serif, Bricolage Grotesque, Bruno Ace, Brygada 1918, Bubblegum Sans, Bubbler One, Buenard, Bungee, Butcherman, Butterfly Kids, Cabin, Cabin Condensed, Cabin Sketch, Caladea, Calistoga, Calligraffitti, Cambay, Cambo, Candal, Cantarell, Cantata One, Cantora One, Capriola, Caramel, Carattere, Cardo, Carme, Carrois Gothic, Carter One, Castoro, Catamaran, Caudex, Caveat, Caveat Brush, Cedarville Cursive, Ceviche One, Chakra Petch, Changa, Changa One, Chango, Charis SIL, Charm, Charmonman, Chathura, Chau Philomene One, Chela One, Chelsea Market, Chenla, Cherry Cream Soda, Cherry Swash, Chewy, Chicle, Chilanka, Chivo, Chivo Mono, Chonburi, Cinzel, Cinzel Decorative, Clicker Script, Climate Crisis, Coda, Codystar, Coiny, Combo, Comfortaa, Comforter, Comic Neue, Coming Soon, Commissioner, Concert One, Condiment, Contrail One, Convergence, Cookie, Copse, Corben, Corinthia, Cormorant, Cormorant Garamond, Cormorant Infant, Cormorant SC, Cormorant Upright, Courgette, Courier Prime, Cousine, Coustard, Covered By Your Grace, Crafty Girls, Creepster, Crete Round, Crimson Pro, Crimson Text, Croissant One, Crushed, Cuprum, Cute Font, Cutive, Cutive Mono, DM Mono, DM Sans, DM Serif Display, DM Serif Text, Dai Banna SIL, Damion, Dancing Script, Dangrek, Darker Grotesque, David Libre, Dawning of a New Day, Days One, Dekko, Delius, Delius Swash Caps, Delius Unicase, Della Respira, Denk One, Devonshire, Dhurjati, Didact Gothic, Diplomata, Dongle, Doppio One, Dorsa, Dosis, DotGothic16, Dr Sugiyama, Duru Sans, Dynalight, EB Garamond, Eagle Lake, East Sea Dokdo, Eater, Economica, Eczar, El Messiri, Electrolize, Elsie, Elsie Swash Caps, Emblema One, Emilys Candy, Encode Sans, Engagement, Englebert, Enriqueta, Epilogue, Erica One, Esteban, Euphoria Script, Ewert, Exo, Exo 2, Expletus Sans, Explora, Fahkwang, Familjen Grotesk, Fanwood Text, Farro, Farsan, Fascinate, Fascinate Inline, Faster One, Fasthand, Fauna One, Faustina, Federant, Federo, Felipa, Fenix, Figtree, Finger Paint, Fira Code, Fira Mono, Fira Sans, Fira Sans Condensed, Fira Sans Extra Condensed, Fjalla One, Fjord One, Flamenco, Flavors, Fleur De Leah, Flow Block, Flow Circular, Flow Rounded, Fondamento, Fontdiner Swanky, Forum, Francois One, Frank Ruhl Libre, Fraunces, Freckle Face, Fredericka the Great, Fredoka, Freehand, Fresca, Frijole, Fruktur, Fugaz One, Fuggles, Fustat, Gabarito, Gabriela, Gaegu, Gafata, Gajraj One, Galada, Galdeano, Galindo, Gamja Flower, Gantari, Gasoek One, Gayathri, Gelasio, Gemunu Libre, Genos, Gentium Book Plus, Gentium Plus, Geo, Geologica, Georama, Geostar, Geostar Fill, Germania One, Gideon Roman, Gidugu, Gilda Display, Girassol, Give You Glory, Glass Antiqua, Glegoo, Gloock, Gloria Hallelujah, Glory, Gluten, Goblin One, Gochi Hand, Goldman, Golos Text, Gorditas, Gothic A1, Gotu, Goudy Bookletter 1911, Gowun Batang, Gowun Dodum, Graduate, Grand Hotel, Grandstander, Gravitas One, Great Vibes, Grechen Fuemen, Grenze, Grenze Gotisch, Grey Qo, Griffy, Gruppo, Gudea, Gugi, Gulzar, Gupter, Gurajada, Gwendolyn, Habibi, Hachi Maru Pop, Hahmlet, Halant, Hammersmith One, Hanalei, Hanalei Fill, Handjet, Handlee, Hanken Grotesk, Hanuman, Happy Monkey, Harmattan, Headland One, Hedvig Letters Sans, Heebo, Henny Penny, Hepta Slab, Herr Von Muellerhoff, Hi Melody, Hina Mincho, Hind, Hind Madurai, Hind Siliguri, Hind Vadodara, Holtwood One SC, Homemade Apple, Homenaje, Honk, Hubballi, Hurricane, IBM Plex Mono, IBM Plex Sans, IBM Plex Sans Condensed, IBM Plex Serif, IM Fell DW Pica, Ibarra Real Nova, Iceberg, Iceland, Imbue, Imperial Script, Imprima, Inclusive Sans, Inconsolata, Inder, Indie Flower, Ingrid Darling, Inika, Inknut Antiqua, Inria Sans, Inria Serif, Inspiration, Instrument Sans, Instrument Serif, Inter, Inter Tight, Irish Grover, Island Moments, Istok Web, Italiana, Italianno, Itim, Jacques Francois, Jaldi, JetBrains Mono, Jim Nightshade, Jockey One, Jolly Lodger, Jomhuria, Jomolhari, Josefin Sans, Josefin Slab, Jost, Joti One, Jua, Judson, Julee, Julius Sans One, Junge, Jura, Just Another Hand, Just Me Again Down Here, K2D, Kablammo, Kadwa, Kaisei Decol, Kalam, Kameron, Kanit, Kantumruy Pro, Karla, Karma, Katibeh, Kaushan Script, Kavivanar, Kavoon, Kay Pho Du, Keania One, Kelly Slab, Kenia, Khand, Khmer, Khula, Kings, Kirang Haerang, Kite One, Kiwi Maru, Klee One, Knewave, Kodchasan, Kolker Brush, Konkhmer Sleokchher, Kosugi, Kotta One, Koulen, Kranky, Kreon, Kristi, Krona One, Krub, Kufam, Kulim Park, Kumar One, Kumbh Sans, Kurale, La Belle Aurore, Labrada, Lacquer, Laila, Lakki Reddy, Lalezar, Lancelot, Langar, Lateef, Lato, Lavishly Yours, League Gothic, League Script, League Spartan, Leckerli One, Ledger, Lekton, Lemon, Lemonada, Lexend, Lexend Deca, Lexend Exa, Lexend Giga, Lexend Mega, Lexend Peta, Lexend Tera, Lexend Zetta, Libre Barcode 39, Libre Baskerville, Libre Bodoni, Libre Caslon Text, Libre Franklin, Licorice, Life Savers, Lilita One, Lily Script One, Limelight, Linden Hill, Lobster, Lobster Two, Londrina Solid, Long Cang, Lora, Love Light, Love Ya Like A Sister, Loved by the King, Lovers Quarrel, Luckiest Guy, Lusitana, Lustria, Luxurious Roman, Luxurious Script, M PLUS 1p, M PLUS Rounded 1c, Ma Shan Zheng, Macondo, Macondo Swash Caps, Mada, Magra, Maiden Orange, Maitree, Major Mono Display, Mako, Mali, Mallanna, Mandali, Manjari, Manrope, Mansalva, Manuale, Marcellus, Marcellus SC, Marck Script, Margarine, Marhey, Markazi Text, Marko One, Marmelad, Martel, Martel Sans, Martian Mono, Marvel, Mate, Mate SC, Maven Pro, McLaren, Mea Culpa, Meddon, MedievalSharp, Medula One, Meera Inimai, Megrim, Meie Script, Meow Script, Merienda, Merriweather, Merriweather Sans, Metal, Metal Mania, Metamorphous, Metrophobic, Michroma, Milonga, Miltonian, Mina, Mingzat, Miniver, Miriam Libre, Mirza, Miss Fajardose, Mitr, Mochiy Pop One, Modak, Modern Antiqua, Mohave, Molengo, Molle, Monda, Monofett, Monomaniac One, Monoton, Monsieur La Doulaise, Montaga, Montagu Slab, MonteCarlo, Montez, Montserrat, Montserrat Alternates, Montserrat Subrayada, Moo Lah Lah, Moon Dance, Moul, Moulpali, Mountains of Christmas, Mouse Memoirs, Mr Bedfort, Mr Dafoe, Mr De Haviland, Mrs Saint Delafield, Mrs Sheppards, Ms Madi, Mukta, Mukta Mahee, Mukta Malar, Mukta Vaani, Mulish, Murecho, MuseoModerno, My Soul, Mynerve, Mystery Quest, NTR, Nabla, Nanum Brush Script, Nanum Gothic, Nanum Gothic Coding, Nanum Myeongjo, Nanum Pen Script, Narnoor, Neonderthaw, Nerko One, Neucha, Neuton, New Rocker, New Tegomin, News Cycle, Newsreader, Niconne, Niramit, Nixie One, Nobile, Nokora, Norican, Nosifer, Notable, Nothing You Could Do, Noticia Text, Noto Color Emoji, Noto Kufi Arabic, Noto Music, Noto Naskh Arabic, Noto Nastaliq Urdu, Noto Rashi Hebrew, Noto Sans, Noto Sans Devanagari, Noto Sans JP, Noto Sans KR, Noto Sans Mono, Noto Sans SC, Noto Sans TC, Noto Sans Symbols, Noto Serif, Noto Serif Devanagari, Noto Serif JP, Noto Serif KR, Noto Serif SC, Noto Serif TC, Nova Cut, Nova Flat, Nova Mono, Nova Oval, Nova Round, Nova Script, Nova Slim, Nova Square, Numans, Nunito, Nunito Sans, Nuosu SIL, Odibee Sans, Odor Mean Chey, Offside, Oi, Old Standard TT, Oldenburg, Ole, Oleo Script, Oleo Script Swash Caps, Onest, Oooh Baby, Open Sans, Oranienbaum, Orbit, Orbitron, Oregano, Orelega One, Orienta, Original Surfer, Oswald, Outfit, Over the Rainbow, Overlock, Overlock SC, Overpass, Overpass Mono, Ovo, Oxanium, Oxygen, Oxygen Mono, PT Mono, PT Sans, PT Sans Caption, PT Sans Narrow, PT Serif, PT Serif Caption, Pacifico, Padauk, Padyakke Expanded One, Palanquin, Palanquin Dark, Palette Mosaic, Pangolin, Paprika, Parisienne, Passero One, Passion One, Passions Conflict, Pathway Extreme, Pathway Gothic One, Patrick Hand, Patrick Hand SC, Pattaya, Patua One, Pavanam, Paytone One, Peddana, Peralta, Permanent Marker, Petemoss, Petit Formal Script, Petrona, Phetsarath, Philosopher, Phudu, Piazzolla, Piedra, Pinyon Script, Pirata One, Pixelify Sans, Plaster, Play, Playball, Playfair, Playfair Display, Playfair Display SC, Playpen Sans, Plus Jakarta Sans, Podkova, Poiret One, Poller One, Poltawski Nowy, Poly, Pompiere, Pontano Sans, Poor Story, Poppins, Port Lligat Sans, Port Lligat Slab, Potta One, Pragati Narrow, Praise, Prata, Preahvihear, Press Start 2P, Pridi, Princess Sofia, Prociono, Prompt, Prosto One, Protest Guerrilla, Proza Libre, Public Sans, Puppies Play, Puritan, Purple Purse, Qahiri, Quando, Quantico, Quattrocento, Quattrocento Sans, Questrial, Quicksand, Quintessential, Qwigley, Qwitcher Grypen, Racing Sans One, Radio Canada, Radley, Rajdhani, Rakkas, Raleway, Raleway Dots, Ramabhadra, Ramaraja, Rambla, Rammetto One, Rampart One, Ranchers, Rancho, Ranga, Rasa, Rationale, Ravi Prakash, Readex Pro, Recursive, Red Hat Display, Red Hat Mono, Red Hat Text, Red Rose, Redacted, Redacted Script, Redressed, Reem Kufi, Reenie Beanie, Reggae One, Rethink Sans, Revalia, Rhodium Libre, Ribeye, Ribeye Marrow, Righteous, Risque, Road Rage, Roboto, Roboto Condensed, Roboto Flex, Roboto Mono, Roboto Serif, Roboto Slab, Rochester, Rock 3D, Rock Salt, RocknRoll One, Rokkitt, Romanesco, Ropa Sans, Rosario, Rosarivo, Rouge Script, Rowdies, Rozha One, Rubik, Rubik Mono One, Rubik Bubbles, Rubik Glitch, Ruda, Rufina, Ruge Boogie, Ruluko, Rum Raisin, Ruslan Display, Russo One, Ruthie, Ruwudu, Rye, STIX Two Text, Sacramento, Sahitya, Sail, Saira, Saira Condensed, Salsa, Sanchez, Sancreek, Sansita, Sarabun, Sarina, Sarpanch, Sassy Frass, Satisfy, Sawarabi Gothic, Sawarabi Mincho, Scada, Scheherazade New, Schibsted Grotesk, Schoolbell, Scope One, Seaweed Script, Secular One, Sedgwick Ave, Sedan, Sen, Send Flowers, Sevillana, Seymour One, Shadows Into Light, Shalimar, Shantell Sans, Shanti, Share, Share Tech, Shippori Mincho, Shojumaru, Short Stack, Shrikhand, Siemreap, Sigmar One, Signika, Signika Negative, Silkscreen, Simonetta, Single Day, Sintony, Sirin Stencil, Six Caps, Skranji, Slabo 13px, Slackey, Smokum, Smooch, Smooch Sans, Smythe, Sniglet, Snippet, Snowburst One, Sofadi One, Sofia, Sofia Sans, Solitreo, Solway, Sometype Mono, Song Myung, Sono, Sonsie One, Sora, Sorts Mill Goudy, Source Code Pro, Source Sans 3, Source Serif 4, Space Grotesk, Space Mono, Special Elite, Spectral, Spicy Rice, Spinnaker, Spirax, Splash, Spline Sans, Squada One, Square Peg, Sree Krushnadevaraya, Sriracha, Srisakdi, Staatliches, Stalemate, Stalinist One, Stardos Stencil, Stick, Stint Ultra Condensed, Stint Ultra Expanded, Stoke, Strait, Style Script, Stylish, Sue Ellen Francisco, Suez One, Sulphur Point, Sumana, Sunshiney, Supermercado One, Sura, Suranna, Suravaram, Suwannaphum, Swanky and Moo Moo, Syncopate, Syne, Tai Heritage Pro, Tajawal, Tangerine, Tapestry, Taprom, Tauri, Taviraj, Teko, Telex, Tenali Ramakrishna, Tenor Sans, Text Me One, Texturina, Thasadith, The Girl Next Door, The Nautigal, Tienne, Tillana, Tilt Neon, Tilt Prism, Tilt Warp, Timmana, Tinos, Tiro Bangla, Titan One, Titillium Web, Tomorrow, Tourney, Trade Winds, Train One, Trirong, Trispace, Trocchi, Trochut, Truculenta, Trykker, Tsukimi Rounded, Tulpen One, Turret Road, Twinkle Star, Ubuntu, Ubuntu Condensed, Ubuntu Mono, Uchen, Ultra, Unbounded, Uncial Antiqua, Underdog, Unica One, UnifrakturCook, UnifrakturMaguntia, Unkempt, Unlock, Unna, Updock, Urbanist, VT323, Vampiro One, Varela, Varela Round, Varta, Vast Shadow, Vazirmatn, Vesper Libre, Viaoda Libre, Vibes, Vibur, Victor Mono, Vidaloka, Viga, Vina Sans, Voces, Volkhov, Vollkorn, Vollkorn SC, Voltaire, Vujahday Script, Waiting for the Sunrise, Wallpoet, Walter Turncoat, Warnes, Water Brush, Waterfall, Wavefont, Wellfleet, Wendy One, Whisper, WindSong, Wire One, Wix Madefor Display, Wix Madefor Text, Work Sans, Workbench, Xanh Mono, Yaldevi, Yanone Kaffeesatz, Yantramanav, Yatra One, Yellowtail, Yeon Sung, Yeseva One, Yesteryear, Yomogi, Young Serif, Yrsa, Ysabeau, Yuji Mai, Yusei Magic, ZCOOL KuaiLe, ZCOOL QingKe HuangYou, ZCOOL XiaoWei, Zen Antique, Zen Dots, Zen Kaku Gothic New, Zen Maru Gothic, Zen Old Mincho, Zen Tokyo Zoo, Zeyada, Zhi Mang Xing, Zilla Slab, Zilla Slab Highlight`.split(/,\s*/).filter(Boolean);
+const GOOGLE_SET = new Set(GOOGLE_FONTS);
+const fontName = (ff) => String(ff || "").split(",")[0].replace(/["']/g, "").trim();
+const fontValue = (name) => `"${name}", sans-serif`;
+const gfUrl = (names) => names.length ? "https://fonts.googleapis.com/css?family=" + names.map((n) => n.replace(/ /g, "+") + ":300,400,500,600,700,800,900").join("|") + "&display=swap" : "";
+const collectFonts = (page) => {
+  const used = new Set();
+  const add = (s) => ["base", "tablet", "mobile", "hover"].forEach((k) => {
+    const f = s && s[k] && s[k].fontFamily;
+    if (f) used.add(fontName(f));
+  });
+  const walk = (list) => list.forEach((n) => { add(n.s); walk(n.children || []); });
+  add(page.s);
+  walk(page.children || []);
+  return [...used].filter(Boolean);
+};
+const customFontCss = (fonts) => (fonts || []).map((f) => `@font-face{font-family:"${String(f.name).replace(/["\\]/g, "")}";src:url("${f.src}");font-display:swap}`).join("");
+const googleUsed = (page) => collectFonts(page).filter((f) => GOOGLE_SET.has(f) && !(page.fonts || []).some((c) => c.name === f));
+function FontLoader({ page }) {
+  const url = gfUrl(googleUsed(page));
+  return (
+    <>
+      {url && <link rel="stylesheet" href={url} />}
+      <style>{customFontCss(page.fonts)}</style>
+    </>
+  );
+}
+function FontItem({ name, active, onPick, onSeen }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") { onSeen(name); return undefined; }
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { onSeen(name); io.disconnect(); } }, { rootMargin: "80px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [name]);
+  return (
+    <button ref={ref} type="button" onClick={() => onPick(name)} className={`flex w-full items-center justify-between truncate rounded px-3 py-1.5 text-left text-[13px] hover:bg-gray-50 ${active ? "bg-blue-50 text-blue-700" : "text-gray-800"}`} style={{ fontFamily: fontValue(name) }}>
+      <span className="truncate">{name}</span>
+      {active && <Ico n="check" size={13} />}
+    </button>
+  );
+}
+function FontPicker({ value, onChange, api }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [pos, setPos] = useState({ left: 8, top: 8 });
+  const btnRef = useRef(null);
+  const fileRef = useRef(null);
+  const loaded = useRef(new Set());
+  const queue = useRef([]);
+  const timer = useRef(null);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const current = fontName(value) || "Inter";
+  const custom = (api.customFonts || []).map((f) => f.name);
+  const fromPage = [...new Set(["Inter", ...(api.pageFonts || [])])];
+  const ql = q.trim().toLowerCase();
+  const match = (n) => !ql || n.toLowerCase().includes(ql);
+  const google = GOOGLE_FONTS.filter(match);
+  const onSeen = (name) => {
+    if (!GOOGLE_SET.has(name) || loaded.current.has(name)) return;
+    loaded.current.add(name);
+    queue.current.push(name);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      const batch = queue.current.splice(0);
+      for (let i = 0; i < batch.length; i += 20) {
+        const l = document.createElement("link");
+        l.rel = "stylesheet";
+        l.href = gfUrl(batch.slice(i, i + 20));
+        document.head.appendChild(l);
+      }
+    }, 120);
+  };
+  const openPicker = () => {
+    const r = btnRef.current.getBoundingClientRect();
+    setPos({
+      left: Math.max(8, window.innerWidth - 312 - 252 - 8),
+      top: Math.max(8, Math.min(r.top - 40, window.innerHeight - 440)),
+    });
+    setQ("");
+    setOpen(true);
+  };
+  const pick = (name) => { onChange(fontValue(name)); setOpen(false); };
+  const upload = (file) => {
+    if (!file) return;
+    const name = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim() || "Custom font";
+    const r = new FileReader();
+    r.onload = () => { api.addFont({ name, src: r.result }); onChange(fontValue(name)); setOpen(false); };
+    r.readAsDataURL(file);
+  };
+  const group = (title, names) => names.length > 0 && (
+    <div key={title}>
+      <div className="px-3 pb-1 pt-2 text-[13px] font-semibold text-gray-900">{title}</div>
+      {names.map((n) => <FontItem key={title + n} name={n} active={n === current} onPick={pick} onSeen={onSeen} />)}
+    </div>
+  );
+  return (
+    <>
+      <button ref={btnRef} type="button" onClick={openPicker} className="flex w-full items-center justify-between rounded-md border border-gray-200 bg-white px-2 py-1 text-xs hover:border-blue-400" style={{ fontFamily: value || "inherit" }}>
+        <span className="truncate">{value ? current : "Inter"}</span><Ico n="down" size={12} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-[59]" onClick={(e) => { e.stopPropagation(); setOpen(false); }} />
+          <div className="fixed z-[60] flex w-[252px] flex-col rounded-xl bg-white p-2 shadow-xl ring-1 ring-black/10" style={{ left: pos.left, top: pos.top, height: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="px-1 pb-2 pt-1 text-[13px] font-semibold">Fonts</div>
+            <SearchBox value={q} onChange={setQ} placeholder="Search fonts" />
+            <div className="mt-2 min-h-0 flex-1 overflow-y-auto">
+              {group("From Page", fromPage.filter(match))}
+              {group("Custom Fonts", custom.filter(match))}
+              {group(`Google Fonts (${google.length})`, google)}
+              {!google.length && !fromPage.filter(match).length && !custom.filter(match).length && (
+                <p className="p-3 text-xs text-gray-500">No fonts found. Try another name or upload a custom font.</p>
+              )}
+            </div>
+            <button type="button" onClick={() => fileRef.current?.click()} className="mt-2 rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-50">
+              Upload Custom Fonts
+            </button>
+            <input ref={fileRef} type="file" accept=".ttf,.otf,.woff,.woff2" hidden onChange={(e) => { const file = e.target.files?.[0]; if (file) upload(file); e.target.value = ""; }} />
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 function SectionThumbnail({ item }) {
   const [sample] = useState(() => item.build());
   const [height, setHeight] = useState(20);
@@ -1580,19 +2264,48 @@ function SliderConfig({ p, api }) {
   );
 }
 
-function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }) {
+function RightPanel({ node: n, device, stateTab, setStateTab, activeNodeState, setActiveNodeState, tab, setTab, api }) {
   const fileRef = useRef(null);
-  /* States + Size are open by default; sections no longer close each other.
-     RightPanel is remounted per selected node (key={selNode.id}), so this default applies on every new selection. */
-  const [openSections, setOpenSections] = useState(["states", "size"]);
+  const imageFileRef = useRef(null);
+  const backgroundFileRef = useRef(null);
+  const [backgroundModes, setBackgroundModes] = useState({});
+  const [addingState, setAddingState] = useState(false);
+  const [newStateName, setNewStateName] = useState("");
+  const [interactionOpen, setInteractionOpen] = useState({ click: false, hover: false, animation: false });
+  const [borderSide, setBorderSide] = useState("all");
+  /* Sections keep independent open states and reset when a different node is selected. */
+  const [openSections, setOpenSections] = useState(() => [
+    "states", "component-states", "size", "spacing", "visibility", "url-hash", "dataset",
+    "config-parent", "config-states", "interaction-parent", "interaction-states",
+    ...(n.type === "faq" ? ["faq-content"] : []),
+    ...(n.type === "container" ? ["layout"] : []),
+    ...(n.type === "image" ? ["image", "border"] : []),
+    ...(n.type === "text" || n.type === "heading" || n.type === "button" || n.type === "icon" || n.type === "list" || n.type === "stars" || n.type === "circle" ? ["typography"] : []),
+  ]);
   const isOpen = (id) => openSections.includes(id);
-  const editKey = stateTab === "hover" ? "hover" : DEVICES[device].key;
-  const cur = resolveStyle(n, device, stateTab === "hover");
+  const showSection = (id) => setOpenSections((list) => list.includes(id) ? list : [...list, id]);
+  const editKey = activeNodeState !== "default" ? `state:${activeNodeState}` : stateTab === "hover" ? "hover" : DEVICES[device].key;
+  const cur = { ...resolveStyle(n, device, stateTab === "hover"), ...(activeNodeState !== "default" ? n.s[editKey] || {} : {}) };
   const set = (k, v) => api.setStyles({ [k]: v }, editKey);
   const isC = n.type === "container";
   const isPage = n.id === PAGE_ID;
   const isTxt = ["text", "heading", "button", "list", "icon", "stars", "circle"].includes(n.type);
+  const isTextContent = ["text", "heading", "button", "icon"].includes(n.type);
   const p = n.props;
+  const backgroundImage = String(cur.backgroundImage || "").trim();
+  const inferredBackgroundMode = /^linear-gradient\(/i.test(backgroundImage)
+    ? "gradient"
+    : /^url\(/i.test(backgroundImage) ? "image" : backgroundImage ? "custom" : "color";
+  const backgroundMode = backgroundModes[n.id] || inferredBackgroundMode;
+  const changeBackgroundMode = (mode) => {
+    setBackgroundModes((modes) => ({ ...modes, [n.id]: mode }));
+    if (mode === "color") set("backgroundImage", "");
+    else if (mode === "image" && !/^url\(/i.test(backgroundImage)) set("backgroundImage", "");
+    else if (mode === "gradient" && !/^linear-gradient\(/i.test(backgroundImage)) set("backgroundImage", DEFAULT_LINEAR_GRADIENT);
+  };
+  const setBackgroundImageUrl = (url) => {
+    api.setStyles(url ? { backgroundImage: `url("${url}")`, backgroundSize: "cover", backgroundPosition: "center" } : { backgroundImage: "" }, editKey);
+  };
 
   const wMode = cur.width === "100%" ? "fill" : !cur.width || cur.width === "fit-content" ? "fit" : "fixed";
   const hMode = cur.height === "100%" ? "fill" : !cur.height || cur.height === "auto" ? "fit" : "fixed";
@@ -1600,32 +2313,92 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
   const axis = fd.startsWith("column") ? "column" : "row";
   const reversed = fd.endsWith("-reverse");
   const isGrid = cur.display === "grid";
+  const borderTokens = String(cur.border || "").match(/#[\da-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)|[^\s]+/gi) || [];
+  const sideBorderKey = borderSide === "all" ? "border" : `border${cap(borderSide)}`;
+  const borderWidth = cur[`${sideBorderKey}Width`] || borderTokens.find((value) => /^\d*\.?\d+(px|rem|em|%|vw|vh)?$/i.test(value)) || "";
+  const borderStyle = cur[`${sideBorderKey}Style`] || borderTokens.find((value) => ["none", "solid", "dashed", "dotted", "double", "groove", "ridge", "inset", "outset"].includes(value)) || "";
+  const borderColor = cur[`${sideBorderKey}Color`] || borderTokens.find((value) => /^#|^(rgb|hsl)a?\(/i.test(value)) || "";
   const sidesOf = (prop) => Object.fromEntries(SIDE_KEYS.map((sd) => [sd, boxSide(cur, prop, sd)]));
   const margin = sidesOf("margin");
   const padding = sidesOf("padding");
   const posKind = cur.position || "static";
   const toggleSection = (section) =>
     setOpenSections((list) => (list.includes(section) ? list.filter((x) => x !== section) : [...list, section]));
+  const setTextPreset = (preset) => {
+    const styles = {
+      paragraph: { fontSize: "16px", fontWeight: "400", lineHeight: "1.5" },
+      "heading-1": { fontSize: "32px", fontWeight: "700", lineHeight: "1.15" },
+      "heading-2": { fontSize: "24px", fontWeight: "700", lineHeight: "1.2" },
+      "heading-3": { fontSize: "20px", fontWeight: "600", lineHeight: "1.25" },
+    }[preset];
+    if (!styles) return;
+    api.setStyles(styles, editKey);
+    if (n.type === "text" || n.type === "heading") api.setProps({ tag: preset === "paragraph" ? "p" : `h${preset.slice(-1)}` });
+  };
+  const setBorderPart = (part, value) => api.setStyles({ border: "", [`${sideBorderKey}${part}`]: value }, editKey);
+  const setDatasetValue = (key, value) => api.setProps({ dataset: { ...(p.dataset || {}), [key]: value } });
+  const renameDatasetKey = (oldKey, newKey) => {
+    if (!validDataKey(newKey) || (newKey !== oldKey && Object.prototype.hasOwnProperty.call(p.dataset || {}, newKey))) return;
+    const dataset = { ...(p.dataset || {}) };
+    dataset[newKey.replace(/^data-/i, "")] = dataset[oldKey];
+    if (newKey !== oldKey) delete dataset[oldKey];
+    api.setProps({ dataset });
+  };
+  const addDatasetAttribute = () => {
+    const dataset = { ...(p.dataset || {}) };
+    let index = 1;
+    while (Object.prototype.hasOwnProperty.call(dataset, `attribute-${index}`)) index += 1;
+    dataset[`attribute-${index}`] = "";
+    api.setProps({ dataset });
+  };
+  const normalizedStateName = newStateName.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-|-$/g, "");
+  const renderParentStates = (sectionId) => !isPage && (
+    <Section title="Parent States" open={isOpen(sectionId)} onToggle={() => toggleSection(sectionId)}>
+      <div className="flex gap-2">
+        <button onClick={() => { setStateTab("default"); setActiveNodeState("default"); }} className={`rounded-md border px-3 py-1 text-xs ${stateTab === "default" && activeNodeState === "default" ? "border-blue-500 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-600"}`}>Default</button>
+        <button onClick={() => { setStateTab("hover"); setActiveNodeState("default"); }} className={`rounded-md border px-3 py-1 text-xs ${stateTab === "hover" && activeNodeState === "default" ? "border-blue-500 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-600"}`}>Hover</button>
+      </div>
+      <p className="text-[11px] text-gray-500">Editing: <b>{stateTab === "hover" ? "hover style" : DEVICES[device].label}</b>{device !== "desktop" && stateTab !== "hover" ? " (overrides desktop)" : ""}.</p>
+      {Object.keys(n.s[editKey] || {}).length > 0 && (
+        <button onClick={() => api.replaceStyle(editKey, {})} className="text-[11px] text-blue-600 underline">Reset overrides</button>
+      )}
+    </Section>
+  );
+  const renderComponentStates = (sectionId) => !isPage && (
+    <Section title="States" open={isOpen(sectionId)} onToggle={() => toggleSection(sectionId)} onAdd={() => { setAddingState(true); setNewStateName(""); }}>
+      <div className="flex flex-wrap gap-2">
+        <button onClick={() => { setActiveNodeState("default"); setStateTab("default"); }} className={`rounded-md border px-3 py-1 text-xs ${activeNodeState === "default" ? "border-blue-500 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-600"}`}>Default</button>
+        {(n.props.componentStates || []).map((name) => (
+          <div key={name} className="flex items-center rounded-md border border-gray-200">
+            <button onClick={() => { setActiveNodeState(name); setStateTab("default"); }} className={`px-2 py-1 text-xs ${activeNodeState === name ? "text-blue-600" : "text-gray-600"}`}>{name}</button>
+            <button aria-label={`Remove ${name} state`} onClick={() => { api.removeComponentState(name); if (activeNodeState === name) setActiveNodeState("default"); }} className="px-1 text-gray-400 hover:text-red-500">×</button>
+          </div>
+        ))}
+      </div>
+      {addingState && (
+        <div className="flex gap-1">
+          <Inp value={newStateName} onChange={setNewStateName} placeholder="State name" />
+          <button type="button" disabled={!normalizedStateName || ["default", "hover"].includes(normalizedStateName) || (n.props.componentStates || []).includes(normalizedStateName)} onClick={() => {
+            api.addComponentState(normalizedStateName);
+            setActiveNodeState(normalizedStateName);
+            setStateTab("default");
+            setAddingState(false);
+          }} className="rounded-md bg-blue-600 px-2 text-xs text-white disabled:opacity-40">Add</button>
+        </div>
+      )}
+    </Section>
+  );
+  const removeDatasetAttribute = (key) => {
+    const dataset = { ...(p.dataset || {}) };
+    delete dataset[key];
+    api.setProps({ dataset });
+  };
 
   /* write all four longhands and drop the shorthand so nothing conflicts */
   const setBox = (prop, side, v) => {
     const vals = prop === "margin" ? margin : padding;
     const o = { [prop]: "" };
     SIDE_KEYS.forEach((sd) => { o[prop + cap(sd)] = sd === side ? v : vals[sd]; });
-    api.setStyles(o, editKey);
-  };
-
-  /* horizontal alignment of the element itself, via auto margins (works in block and flex parents) */
-  const alignNow = margin.left === "auto" && margin.right === "auto" ? "center" : margin.left === "auto" ? "right" : "left";
-  const setAlign = (v) => {
-    const o = {
-      margin: "",
-      marginTop: margin.top, marginBottom: margin.bottom,
-      marginLeft: v === "left" ? "" : "auto",
-      marginRight: v === "right" ? "" : "auto",
-    };
-    if (["image", "button", "icon"].includes(n.type)) o.display = "block"; // inline elements ignore auto margins
-    if (["icon", "stars"].includes(n.type) && !cur.width) o.width = "fit-content";
     api.setStyles(o, editKey);
   };
 
@@ -1654,21 +2427,17 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
       <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-4">
         {tab === "design" && (
           <>
-            <Section title="States" open={isOpen("states")} onToggle={() => toggleSection("states")}>
-              <div className="flex gap-2">
-                <button onClick={() => setStateTab("default")} className={`rounded-md border px-3 py-1 text-xs ${stateTab === "default" ? "border-blue-500 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-600"}`}>Default</button>
-                {!isPage && <button onClick={() => setStateTab("hover")} className={`rounded-md border px-3 py-1 text-xs ${stateTab === "hover" ? "border-blue-500 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-600"}`}>Hover</button>}
-              </div>
-              <p className="text-[11px] text-gray-500">
-                Editing: <b>{stateTab === "hover" ? "hover style" : DEVICES[device].label}</b>
-                {device !== "desktop" && stateTab !== "hover" ? " (overrides desktop)" : ""}. Click a frame to switch device.
-              </p>
-              {Object.keys(n.s[editKey]).length > 0 && editKey !== "base" && (
-                <button onClick={() => api.replaceStyle(editKey, {})} className="text-[11px] text-blue-600 underline">Reset {editKey} overrides</button>
-              )}
-            </Section>
+            {renderParentStates("states")}
+            {renderComponentStates("component-states")}
 
-            <Section title="Size" open={isOpen("size")} onToggle={() => toggleSection("size")}>
+            {n.type === "faq" && (
+              <Section title="FAQ Content" open={isOpen("faq-content")} onToggle={() => toggleSection("faq-content")}>
+                <Field label="Question"><Inp value={p.question} onChange={(v) => api.setProps({ question: v })} /></Field>
+                <div><span className="mb-1 block text-xs text-gray-500">Answer</span><Area rows={5} value={p.answer} onChange={(v) => api.setProps({ answer: v })} /></div>
+              </Section>
+            )}
+
+            <Section title="Size" open={isOpen("size")} onToggle={() => toggleSection("size")} onAdd={() => showSection("size")}>
               {!isPage && (<>
                 <Field label="Width">
                   <div className="flex gap-1">
@@ -1690,14 +2459,11 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
               {!isPage && (<>
                 <Field label="Flex"><Inp value={cur.flex} onChange={(v) => set("flex", v)} placeholder="e.g. 1" /></Field>
                 <Field label="Ratio"><Inp value={cur.aspectRatio} onChange={(v) => set("aspectRatio", v)} placeholder="e.g. 16 / 9" /></Field>
-                <Field label="Align">
-                  <Seg value={alignNow} options={[{ value: "left", label: "Left" }, { value: "center", label: "Center" }, { value: "right", label: "Right" }]} onChange={setAlign} />
-                </Field>
               </>)}
             </Section>
 
             {isC && (
-              <Section title="Layout" open={isOpen("layout")} onToggle={() => toggleSection("layout")}>
+              <Section title="Layout" open={isOpen("layout")} onToggle={() => toggleSection("layout")} onAdd={() => showSection("layout")}>
                 <Seg value={isGrid ? "columns" : layoutOn ? "auto" : ""} options={[{ value: "auto", label: "Auto Layout" }, { value: "columns", label: "Columns" }]}
                   onChange={(m) => m === "columns"
                     ? api.setStyles({ display: "grid", gridTemplateColumns: "repeat(2, 1fr)" }, editKey)
@@ -1785,7 +2551,7 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
               <p className="text-[11px] text-gray-500">Use values like 16px, 2rem, auto. Shorthand padding and margin values are shown per side.</p>
             </Section>
 
-            <Section title="Positioning" open={isOpen("positioning")} onToggle={() => toggleSection("positioning")}>
+            <Section title="Positioning" open={isOpen("positioning")} onToggle={() => toggleSection("positioning")} onAdd={() => showSection("positioning")}>
               <Seg value={posKind} options={["static", "relative", "absolute", "sticky", "fixed"]} onChange={(v) => set("position", v === "static" ? "" : v)} />
               {posKind !== "static" && (
                 <div className="grid grid-cols-2 gap-2">
@@ -1796,31 +2562,132 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
             </Section>
 
             {(isTxt || isPage) && (
-              <Section title="Typography" open={isOpen("typography")} onToggle={() => toggleSection("typography")}>
-                <Field label="Font"><Inp value={cur.fontFamily} onChange={(v) => set("fontFamily", v)} placeholder="inherit" /></Field>
+              <Section title={isTxt ? "Text" : "Typography"} open={isOpen("typography")} onToggle={() => toggleSection("typography")}>
+                {n.type === "icon" && <Field label="Icon"><IconPicker value={p.iconName} onChange={(iconName) => api.setProps({ iconName })} /></Field>}
+                {isTextContent && (
+                  <>
+                    <Area value={p.text} onChange={(v) => api.setProps({ text: v })} />
+                    <div className="flex items-center gap-1 rounded-md border border-gray-200 p-1">
+                      <button type="button" title="Bold" onClick={() => set("fontWeight", cur.fontWeight === "700" ? "400" : "700")} className={`rounded px-2 py-1 text-xs font-bold ${cur.fontWeight === "700" ? "bg-blue-50 text-blue-700" : ""}`}>B</button>
+                      <button type="button" title="Italic" onClick={() => set("fontStyle", cur.fontStyle === "italic" ? "normal" : "italic")} className={`rounded px-2 py-1 text-xs italic ${cur.fontStyle === "italic" ? "bg-blue-50 text-blue-700" : ""}`}>I</button>
+                      <button type="button" title="Underline" onClick={() => set("textDecoration", cur.textDecoration === "underline" ? "none" : "underline")} className={`rounded px-2 py-1 text-xs underline ${cur.textDecoration === "underline" ? "bg-blue-50 text-blue-700" : ""}`}>U</button>
+                    </div>
+                    <Field label="Style">
+                      <Sel value={cur.fontSize === "32px" ? "heading-1" : cur.fontSize === "24px" ? "heading-2" : cur.fontSize === "20px" ? "heading-3" : cur.fontSize === "16px" || !cur.fontSize ? "paragraph" : "custom"}
+                        options={["custom", "paragraph", "heading-1", "heading-2", "heading-3"]} onChange={setTextPreset} />
+                    </Field>
+                  </>
+                )}
+                <Field label="Align"><Seg value={cur.textAlign || "left"} options={["left", "center", "right"]} onChange={(v) => set("textAlign", v)} /></Field>
+                <Field label="Font"><FontPicker value={cur.fontFamily} onChange={(v) => set("fontFamily", v)} api={api} /></Field>
                 <Field label="Size"><StepInp value={cur.fontSize} onChange={(v) => set("fontSize", v)} placeholder="16px" step={1} defaultUnit="px" label="font size" /></Field>
                 <Field label="Weight"><Sel value={cur.fontWeight || ""} options={["", "300", "400", "500", "600", "700", "800", "900"]} onChange={(v) => set("fontWeight", v)} /></Field>
                 <Field label="Color"><Color value={cur.color} onChange={(v) => set("color", v)} /></Field>
                 <Field label="Line h."><StepInp value={cur.lineHeight} onChange={(v) => set("lineHeight", v)} placeholder="1.5" step={0.05} label="line height" /></Field>
                 <Field label="Letter sp."><StepInp value={cur.letterSpacing} onChange={(v) => set("letterSpacing", v)} placeholder="0" step={0.1} defaultUnit="px" label="letter spacing" /></Field>
-                <Seg value={cur.textAlign || "left"} options={["left", "center", "right"]} onChange={(v) => set("textAlign", v)} />
+                {(n.type === "text" || n.type === "heading") && (
+                  <Field label="Tag">
+                    <Sel value={p.tag || (n.type === "text" ? "p" : "h2")} options={n.type === "text" ? TEXT_TAGS : ["h1", "h2", "h3", "h4", "h5", "h6"]}
+                      onChange={(v) => api.setProps({ tag: v })} />
+                  </Field>
+                )}
               </Section>
             )}
 
-            <Section title="Background" open={isOpen("background")} onToggle={() => toggleSection("background")}>
+            {n.type === "image" && (
+              <Section title="Image" open={isOpen("image")} onToggle={() => toggleSection("image")}>
+                <Field label="URL">
+                  <Inp value={p.src?.startsWith("data:") ? "(uploaded image)" : p.src} onChange={(v) => { if (v !== "(uploaded image)") api.setProps({ src: v }); }} placeholder="https://…" />
+                </Field>
+                <button type="button" onClick={() => imageFileRef.current?.click()} className="w-full rounded-md border border-gray-200 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Upload image</button>
+                <input ref={imageFileRef} type="file" accept="image/*" hidden onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = () => api.setProps({ src: reader.result });
+                    reader.readAsDataURL(file);
+                  }
+                  e.target.value = "";
+                }} />
+                <Field label="Fit">
+                  <Sel value={cur.objectFit || "cover"} options={["cover", "contain", "fill", "none", "scale-down"]} onChange={(v) => set("objectFit", v)} />
+                </Field>
+                <Field label="Position">
+                  <ImagePositionControl value={cur.objectPosition} onChange={(v) => set("objectPosition", v)} />
+                </Field>
+                <Field label="Zoom">
+                  <ImageZoomSelect
+                    value={p.zoom ?? "0%"}
+                    presets={Array.isArray(p.zoomPresets) ? p.zoomPresets : []}
+                    onChange={(v) => api.setProps({ zoom: imageZoomDeltaOf(v) })}
+                    onAddPreset={(v) => api.setProps({
+                      zoom: imageZoomDeltaOf(v),
+                      zoomPresets: [...new Set([...(p.zoomPresets || []), v])],
+                    })}
+                  />
+                </Field>
+              </Section>
+            )}
+
+            <Section title="Background" open={isOpen("background")} onToggle={() => toggleSection("background")} onAdd={() => showSection("background")}>
               <Field label="Color"><Color value={cur.background} onChange={(v) => set("background", v)} /></Field>
-              {isC && (
-                <Field label="Image URL"><Inp value={(cur.backgroundImage || "").replace(/^url\(["']?|["']?\)$/g, "")} onChange={(v) => api.setStyles(v ? { backgroundImage: `url("${v}")`, backgroundSize: "cover", backgroundPosition: "center" } : { backgroundImage: "" }, editKey)} placeholder="https://…" /></Field>
+              <Field label="Type">
+                <select value={backgroundMode} onChange={(e) => changeBackgroundMode(e.target.value)} className="w-full rounded-md border border-gray-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-blue-500">
+                  <option value="color">Color</option>
+                  <option value="image">Image</option>
+                  <option value="gradient">Linear gradient</option>
+                  <option value="custom">Custom CSS</option>
+                </select>
+              </Field>
+              {backgroundMode === "image" && (
+                <>
+                  <Field label="Image URL">
+                    <Inp value={backgroundImage.replace(/^url\(["']?|["']?\)$/g, "")} onChange={setBackgroundImageUrl} placeholder="https://…" />
+                  </Field>
+                  <button type="button" onClick={() => backgroundFileRef.current?.click()} className="w-full rounded-md border border-gray-200 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Choose background image</button>
+                  <input ref={backgroundFileRef} type="file" accept="image/*" hidden onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        setBackgroundImageUrl(reader.result);
+                        setBackgroundModes((modes) => ({ ...modes, [n.id]: "image" }));
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                    e.target.value = "";
+                  }} />
+                </>
+              )}
+              {backgroundMode === "gradient" && (
+                <LinearGradientEditor value={backgroundImage || DEFAULT_LINEAR_GRADIENT} onChange={(v) => set("backgroundImage", v)} />
+              )}
+              {backgroundMode === "custom" && (
+                <Field label="CSS image"><Inp value={backgroundImage} onChange={(v) => set("backgroundImage", v)} placeholder="e.g. radial-gradient(...)" /></Field>
               )}
             </Section>
 
-            <Section title="Border & effects" open={isOpen("border")} onToggle={() => toggleSection("border")}>
-              <Field label="Border"><Inp value={cur.border} onChange={(v) => set("border", v)} placeholder="1px solid #e5e7eb" /></Field>
+            <Section title="Border" open={isOpen("border")} onToggle={() => toggleSection("border")} onAdd={() => showSection("border")}>
+              <Field label="Sides"><Seg value={borderSide} options={["all", "top", "right", "bottom", "left"]} onChange={setBorderSide} /></Field>
+              <Field label="Style">
+                <select value={borderStyle} onChange={(e) => setBorderPart("Style", e.target.value)} className="w-full rounded-md border border-gray-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-blue-500">
+                  <option value="">Default</option>
+                  <option value="none">None</option>
+                  <option value="solid">Solid</option>
+                  <option value="dashed">Dashed</option>
+                  <option value="dotted">Dotted</option>
+                  <option value="double">Double</option>
+                </select>
+              </Field>
+              <Field label="Color"><Color value={borderColor} onChange={(v) => setBorderPart("Color", v)} placeholder="#hex or CSS color" /></Field>
+              <Field label="Width"><BorderWidthSelect value={borderWidth} onChange={(v) => setBorderPart("Width", v)} /></Field>
               <Field label="Radius"><Inp value={cur.borderRadius} onChange={(v) => set("borderRadius", v)} placeholder="0px" /></Field>
+            </Section>
+
+            <Section title="Effects" open={isOpen("effects")} onToggle={() => toggleSection("effects")} onAdd={() => showSection("effects")}>
               <Field label="Shadow"><Inp value={cur.boxShadow} onChange={(v) => set("boxShadow", v)} placeholder="0 4px 12px rgba(0,0,0,.1)" /></Field>
               <Field label="Opacity"><Inp value={cur.opacity} onChange={(v) => set("opacity", v)} placeholder="1" /></Field>
               <Field label="Overflow"><Sel value={cur.overflow || ""} options={["", "visible", "hidden", "auto", "scroll"]} onChange={(v) => set("overflow", v)} /></Field>
-              {n.type === "image" && <Field label="Fit"><Sel value={cur.objectFit || ""} options={["", "cover", "contain", "fill", "none"]} onChange={(v) => set("objectFit", v)} /></Field>}
               <Field label="Cursor"><Sel value={cur.cursor || ""} options={["", "pointer", "default", "not-allowed"]} onChange={(v) => set("cursor", v)} /></Field>
             </Section>
 
@@ -1833,8 +2700,33 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
 
         {tab === "config" && (
           <div className="space-y-3 pt-3">
+            {renderParentStates("config-parent")}
+            {renderComponentStates("config-states")}
             <Field label="Name"><Inp value={n.name} onChange={(v) => api.rename(n.id, v)} /></Field>
             {n.type === "container" && <Field label="HTML tag"><Sel value={p.tag || "div"} options={["div", "section", "header", "footer", "main", "nav", "article", "aside"]} onChange={(v) => api.setProps({ tag: v })} /></Field>}
+            {n.type === "container" && (
+              <>
+                <Section title="URL Hash Mark" open={isOpen("url-hash")} onToggle={() => toggleSection("url-hash")}>
+                  <Field label="URL Hash Mark"><Inp value={p.urlHashMark || ""} onChange={(v) => api.setProps({ urlHashMark: v })} placeholder="#" /></Field>
+                  <Toggle label="Auto-enable URL Hash Mark" checked={!!p.autoUrlHashMark} onChange={(v) => api.setProps({ autoUrlHashMark: v })} />
+                  <Field label="Offset"><StepInp value={p.urlHashMarkOffset ?? "0px"} onChange={(v) => api.setProps({ urlHashMarkOffset: v })} placeholder="0px" step={1} defaultUnit="px" label="hash mark offset" /></Field>
+                  <p className="text-[11px] text-gray-500">The URL hash mark is applied when this container scrolls into view.</p>
+                </Section>
+                <Section title="Dataset Attributes" open={isOpen("dataset")} onToggle={() => toggleSection("dataset")} onAdd={addDatasetAttribute}>
+                  <p className="text-[11px] text-gray-500">Custom data attributes are added to the component’s HTML element.</p>
+                  {Object.entries(p.dataset || {}).map(([key, value]) => (
+                    <div key={key} className="space-y-1 rounded-md border border-gray-100 p-2">
+                      <div className="flex items-center gap-1">
+                        <span className="text-[11px] text-gray-400">data-</span>
+                        <Inp value={key.replace(/^data-/i, "")} onChange={(v) => renameDatasetKey(key, v)} placeholder="attribute-name" />
+                        <button type="button" aria-label={`Remove ${key} attribute`} onClick={() => removeDatasetAttribute(key)} className="px-1 text-gray-400 hover:text-red-500">×</button>
+                      </div>
+                      <Inp value={value} onChange={(v) => setDatasetValue(key, v)} placeholder="Value" />
+                    </div>
+                  ))}
+                </Section>
+              </>
+            )}
             {n.type === "heading" && <Field label="HTML tag"><Sel value={p.tag || "h2"} options={["h1", "h2", "h3", "h4", "h5", "h6"]} onChange={(v) => api.setProps({ tag: v })} /></Field>}
             {["text", "heading", "button", "icon", "circle"].includes(n.type) && (
               <div><span className="mb-1 block text-xs text-gray-500">Content</span><Area autoFocus value={p.text} onChange={(v) => api.setProps({ text: v })} /></div>
@@ -1857,23 +2749,51 @@ function RightPanel({ node: n, device, stateTab, setStateTab, tab, setTab, api }
               <Inp value={p.className} onChange={(v) => api.setProps({ className: v })} placeholder="e.g. shadow-lg hover:scale-105" />
               <p className="mt-1 text-[11px] text-gray-500">Only classes that exist in your Tailwind build will apply. Use the Design tab for any custom value.</p>
             </div>
+            {!isPage && (isC || n.type === "faq") && (
+              <Section title="Custom JavaScript" open={isOpen("custom-js")} onToggle={() => toggleSection("custom-js")}>
+                <textarea rows={8} value={p.customJs || ""} spellCheck={false} onChange={(e) => api.setProps({ customJs: e.target.value })}
+                  placeholder={"// root is this component\nroot.querySelectorAll('details')"}
+                  className="w-full resize-y rounded-md border border-gray-200 bg-gray-50 px-2 py-1 font-mono text-[11px] outline-none focus:border-blue-500" />
+                <Toggle label="Load jQuery 3.7.1 on export" checked={!!p.loadJQuery} onChange={(v) => api.setProps({ loadJQuery: v })} />
+                <p className="text-[11px] text-gray-500">Runs in the exported page. Use <code>root</code> to target this component; jQuery is available when enabled. Built-in FAQ toggles also work in Preview.</p>
+              </Section>
+            )}
           </div>
         )}
 
         {tab === "interactions" && (
           <div className="space-y-3 pt-3">
-            <span className="text-xs font-medium text-gray-700">On click</span>
-            <Seg value={p.action?.type || "none"} options={[{ value: "none", label: "None" }, { value: "link", label: "Open link" }, { value: "scroll", label: "Scroll to" }]}
-              onChange={(v) => api.setProps({ action: { ...(p.action || {}), type: v, value: p.action?.value || "" } })} />
-            {(p.action?.type === "link" || p.action?.type === "scroll") && (
-              <Field label={p.action.type === "link" ? "URL" : "Element id"}>
-                <Inp value={p.action.value} onChange={(v) => api.setProps({ action: { ...p.action, value: v } })} placeholder={p.action.type === "link" ? "https://…" : "section-id"} />
+            {renderParentStates("interaction-parent")}
+            {renderComponentStates("interaction-states")}
+            <Section title="On Click" open={interactionOpen.click} onToggle={() => setInteractionOpen((x) => ({ ...x, click: !x.click }))} onAdd={() => setInteractionOpen((x) => ({ ...x, click: true }))}>
+              <Seg value={p.action?.type || "none"} options={[{ value: "none", label: "None" }, { value: "link", label: "Open link" }, { value: "scroll", label: "Scroll to" }]}
+                onChange={(v) => api.setProps({ action: { ...(p.action || {}), type: v, value: p.action?.value || "" } })} />
+              {(p.action?.type === "link" || p.action?.type === "scroll") && (
+                <Field label={p.action.type === "link" ? "URL" : "Element id"}>
+                  <Inp value={p.action.value} onChange={(v) => api.setProps({ action: { ...p.action, value: v } })} placeholder={p.action.type === "link" ? "https://…" : "section-id"} />
+                </Field>
+              )}
+              {p.action?.type === "link" && (
+                <Toggle label="Open in new tab" checked={!!p.action.newTab} onChange={(v) => api.setProps({ action: { ...p.action, newTab: v } })} />
+              )}
+            </Section>
+            <Section title="On Mouse Over" open={interactionOpen.hover} onToggle={() => setInteractionOpen((x) => ({ ...x, hover: !x.hover }))} onAdd={() => setInteractionOpen((x) => ({ ...x, hover: true }))}>
+              <Seg value={p.hoverAction?.type || "none"} options={[{ value: "none", label: "None" }, { value: "link", label: "Open link" }, { value: "scroll", label: "Scroll to" }]}
+                onChange={(v) => api.setProps({ hoverAction: { ...(p.hoverAction || {}), type: v, value: p.hoverAction?.value || "" } })} />
+              {(p.hoverAction?.type === "link" || p.hoverAction?.type === "scroll") && (
+                <Field label={p.hoverAction.type === "link" ? "URL" : "Element id"}>
+                  <Inp value={p.hoverAction.value} onChange={(v) => api.setProps({ hoverAction: { ...p.hoverAction, value: v } })} placeholder={p.hoverAction.type === "link" ? "https://…" : "section-id"} />
+                </Field>
+              )}
+              {p.hoverAction?.type === "link" && (
+                <Toggle label="Open in new tab" checked={!!p.hoverAction.newTab} onChange={(v) => api.setProps({ hoverAction: { ...p.hoverAction, newTab: v } })} />
+              )}
+            </Section>
+            <Section title="Animations" open={interactionOpen.animation} onToggle={() => setInteractionOpen((x) => ({ ...x, animation: !x.animation }))} onAdd={() => setInteractionOpen((x) => ({ ...x, animation: true }))}>
+              <Field label="Animation">
+                <Sel value={p.animation || ""} options={["", "fade-in", "slide-up", "zoom-in"]} onChange={(v) => api.setProps({ animation: v })} />
               </Field>
-            )}
-            {p.action?.type === "link" && (
-              <label className="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={!!p.action.newTab} onChange={(e) => api.setProps({ action: { ...p.action, newTab: e.target.checked } })} />Open in new tab</label>
-            )}
-            <p className="text-[11px] text-gray-500">Hover effects: Design → States → Hover, then change any style. Works in Preview and in the exported page.</p>
+            </Section>
           </div>
         )}
 
@@ -1960,6 +2880,7 @@ export default function Editor() {
   const [selId, setSelId] = useState(null);
   const [activeDevice, setActiveDevice] = useState("desktop");
   const [stateTab, setStateTab] = useState("default");
+  const [activeNodeState, setActiveNodeState] = useState("default");
   const [panelTab, setPanelTab] = useState("design");
   const [inlineEdit, setInlineEdit] = useState(null);
   const inlineEditRef = useRef(null);
@@ -1974,9 +2895,10 @@ export default function Editor() {
   const [sectionDragOutline, setSectionDragOutline] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
   const [dropLine, setDropLine] = useState(null); // blue insertion line while dragging a component / element
+  const [layerDropTarget, setLayerDropTarget] = useState(null);
   const movingRef = useRef(null); // id of the element being moved inside the page
   useEffect(() => {
-    const clear = () => { movingRef.current = null; setDropLine(null); };
+    const clear = () => { movingRef.current = null; setDropLine(null); setLayerDropTarget(null); };
     window.addEventListener("dragend", clear);
     window.addEventListener("drop", clear);
     return () => { window.removeEventListener("dragend", clear); window.removeEventListener("drop", clear); };
@@ -2199,6 +3121,7 @@ export default function Editor() {
     setDimPop(null);
     if (d) setActiveDevice(d);
     setStateTab("default");
+    setActiveNodeState("default");
     setPanelTab("design");
   };
   const editNode = (n, d, element) => {
@@ -2243,6 +3166,25 @@ export default function Editor() {
   }, "pg:" + k);
   const api = {
     device: activeDevice,
+    addComponentState: (name) => patchId(selId, (n) => ({
+      ...n,
+      props: { ...n.props, componentStates: [...new Set([...(n.props.componentStates || []), name])] },
+    }), "component-states"),
+    removeComponentState: (name) => patchId(selId, (n) => {
+      const s = { ...n.s };
+      delete s[`state:${name}`];
+      return {
+        ...n,
+        s,
+        props: { ...n.props, componentStates: (n.props.componentStates || []).filter((state) => state !== name) },
+      };
+    }, "component-states"),
+    customFonts: page.fonts || [],
+    pageFonts: collectFonts(page),
+    addFont: (font) => update((p) => ({
+      ...p,
+      fonts: [...(p.fonts || []).filter((existing) => existing.name !== font.name), font],
+    })),
     select,
     setStyles: (obj, tgt) =>
       patchId(selId, (n) => {
@@ -2255,6 +3197,11 @@ export default function Editor() {
     rename: (id, name) => patchId(id, (n) => ({ ...n, name }), "rename"),
     toggleHide: (id, d) => patchId(id, (n) => ({ ...n, hide: { ...n.hide, [d || activeDevice]: !n.hide[d || activeDevice] } })),
     remove: (id) => { update((p) => ({ ...p, children: removeNode(p.children, id) })); },
+    layerDropTarget,
+    startMove: (id) => { movingRef.current = id; },
+    endMove: () => { movingRef.current = null; setDropLine(null); setLayerDropTarget(null); },
+    hintLayerDrop: (e, id, mode) => hintLayerDrop(e, id, mode),
+    dropLayer: (e, id, mode) => dropLayer(e, id, mode),
     dup: (id) => {
       const orig = findNode(page.children, id);
       if (!orig) return;
@@ -2292,27 +3239,34 @@ export default function Editor() {
     setSelId(nn.id);
   };
   const addSection = (nn) => addNode(nn, null);
-  const addSectionAtDrop = (nn, e) => {
+  const rootDropIndex = (e, excludeId) => {
     const target = document.elementFromPoint(e.clientX, e.clientY);
     const pageFrame = target?.closest(".rp-frame");
-    const sections = pageFrame ? [...pageFrame.querySelectorAll('[data-page-section="true"]')] : [];
+    const siblings = page.children.filter((child) => child.id !== excludeId);
+    const sections = pageFrame
+      ? [...pageFrame.querySelectorAll('[data-page-section="true"]')].filter((section) => section.dataset.node !== excludeId)
+      : [];
     const targetSection = target?.closest('[data-page-section="true"]');
-    let index = page.children.length;
 
-    if (targetSection) {
-      const targetIndex = page.children.findIndex((child) => child.id === targetSection.dataset.node);
+    if (targetSection && targetSection.dataset.node !== excludeId) {
+      const targetIndex = siblings.findIndex((child) => child.id === targetSection.dataset.node);
       const bounds = targetSection.getBoundingClientRect();
-      if (targetIndex >= 0) index = targetIndex + (e.clientY >= bounds.top + bounds.height / 2 ? 1 : 0);
-    } else if (sections.length) {
+      if (targetIndex >= 0) return targetIndex + (e.clientY >= bounds.top + bounds.height / 2 ? 1 : 0);
+    }
+    if (sections.length) {
       const next = sections.find((section) => {
         const bounds = section.getBoundingClientRect();
         return e.clientY < bounds.top + bounds.height / 2;
       });
       if (next) {
-        const nextIndex = page.children.findIndex((child) => child.id === next.dataset.node);
-        if (nextIndex >= 0) index = nextIndex;
+        const nextIndex = siblings.findIndex((child) => child.id === next.dataset.node);
+        if (nextIndex >= 0) return nextIndex;
       }
     }
+    return siblings.length;
+  };
+  const addSectionAtDrop = (nn, e) => {
+    const index = rootDropIndex(e, null);
 
     update((p) => ({ ...p, children: insertInto(p.children, null, nn, index) }));
     setSelId(nn.id);
@@ -2359,9 +3313,57 @@ export default function Editor() {
   };
   const moveNodeTo = (id, parentId, index) => update((p) => {
     const moving = findNode(p.children, id);
-    if (!moving || parentId == null || parentId === id || findNode(moving.children, parentId)) return p;
+    if (!moving || parentId === id || (parentId != null && findNode(moving.children, parentId))) return p;
     return { ...p, children: insertInto(removeNode(p.children, id), parentId, moving, index) };
   });
+  const hintLayerDrop = (e, targetId, mode) => {
+    if (!e.dataTransfer.types.includes("text/x-move")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const movingId = e.dataTransfer.getData("text/x-move") || movingRef.current;
+    if (!movingId || movingId === targetId || (mode === "inside" && insideItself(movingId, targetId))) {
+      setLayerDropTarget(null);
+      return;
+    }
+    setLayerDropTarget({ id: targetId, mode });
+  };
+  const dropLayer = (e, targetId, mode) => {
+    if (!e.dataTransfer.types.includes("text/x-move")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const movingId = e.dataTransfer.getData("text/x-move") || movingRef.current;
+    setLayerDropTarget(null);
+    if (!movingId || movingId === targetId) return;
+
+    if (targetId === PAGE_ID) {
+      const index = page.children.filter((child) => child.id !== movingId).length;
+      moveNodeTo(movingId, null, index);
+      setSelId(movingId);
+      return;
+    }
+
+    const target = findNode(page.children, targetId);
+    if (!target) return;
+    if (mode === "inside" && target.type === "container") {
+      if (insideItself(movingId, targetId)) return;
+      const index = target.children.filter((child) => child.id !== movingId).length;
+      moveNodeTo(movingId, targetId, index);
+      setSelId(movingId);
+      return;
+    }
+
+    const parentId = findParentId(page.children, targetId) ?? null;
+    const siblings = parentId == null ? page.children : findNode(page.children, parentId)?.children || [];
+    const targetIndex = siblings.findIndex((child) => child.id === targetId);
+    const sourceParentId = findParentId(page.children, movingId) ?? null;
+    const sourceSiblings = sourceParentId == null ? page.children : findNode(page.children, sourceParentId)?.children || [];
+    let index = targetIndex + (mode === "after" ? 1 : 0);
+    const sourceIndex = sourceSiblings.findIndex((child) => child.id === movingId);
+    if (targetIndex < 0 || insideItself(movingId, parentId)) return;
+    if (sourceParentId === parentId && sourceIndex >= 0 && sourceIndex < index) index -= 1;
+    moveNodeTo(movingId, parentId, index);
+    setSelId(movingId);
+  };
   const addComponentAtDrop = (nn, parentId, e) => {
     if (parentId == null) return addSectionAtDrop(nn, e);
     const slot = dropSlot(parentId, e, null);
@@ -2435,12 +3437,16 @@ export default function Editor() {
     }
     const moveId = e.dataTransfer.getData("text/x-move") || movingRef.current;
     if (moveId && e.dataTransfer.types.includes("text/x-move")) {
-      if (parentId != null && !insideItself(moveId, parentId)) {
+      if (parentId == null) {
+        moveNodeTo(moveId, null, rootDropIndex(e, moveId));
+        setSelId(moveId);
+      } else if (!insideItself(moveId, parentId)) {
         const slot = dropSlot(parentId, e, moveId);
         if (slot) { moveNodeTo(moveId, parentId, slot.index); setSelId(moveId); }
       }
       movingRef.current = null;
       setDropLine(null);
+      setLayerDropTarget(null);
       return;
     }
     const sectionKey = e.dataTransfer.getData("text/x-section");
@@ -2517,7 +3523,7 @@ export default function Editor() {
   };
 
   const ctx = {
-    preview: false, zoom: s, selectedId: selId, activeDevice, stateTab, inlineEdit, inlineEditRef,
+    preview: false, zoom: s, selectedId: selId, activeDevice, stateTab, activeNodeState, inlineEdit, inlineEditRef,
     changeInlineText: (id, value) => {
       setInlineEdit((edit) => edit?.id === id ? { ...edit, value } : edit);
       patchId(id, (n) => n.props.text === value ? n : ({ ...n, props: { ...n.props, text: value } }), "inline-content");
@@ -2581,14 +3587,14 @@ export default function Editor() {
         <div className="absolute left-0 top-0 flex items-start"
           style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${s})`, transformOrigin: "0 0", gap: 16 / s, width: "max-content" }}>
           <style>{FRAME_CSS}</style>
+          <FontLoader page={page} />
           {visible.map((d, i) => {
             const W = widths[d];
             return (
-              <div key={d} data-nopan className="group relative shrink-0" style={{ width: Math.max(W, 175 / s) }} onClick={(e) => e.stopPropagation()}>
-                {/* header: always screen-size, whatever the zoom */}
-                <div style={{ width: W, height: 58 / s }}>
+              <div key={d} data-nopan className="group relative shrink-0" style={{ width: W }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ width: W, height: 58 }}>
                   <div className="relative flex items-center gap-2 rounded-lg bg-white px-3 shadow-sm ring-1 ring-black/5"
-                    style={{ width: Math.max(W * s, 175), height: 48, transform: `scale(${1 / s})`, transformOrigin: "0 0" }}>
+                    style={{ width: W, height: 48 }}>
                     {i === 0 && (
                       <button title="Show devices" aria-label="Show devices" onClick={(e) => { e.stopPropagation(); openDim(e, "devices"); }}
                         className="absolute flex items-center justify-center rounded-lg bg-white shadow-sm ring-1 ring-black/5"
@@ -2661,7 +3667,7 @@ export default function Editor() {
             <span className="text-[13px] font-semibold">Page settings</span>
             <Field label="Title"><Inp value={page.title} onChange={(v) => update((p) => ({ ...p, title: v }), "title")} /></Field>
             <Field label="Background"><Color value={page.s.base.background} onChange={(v) => setPageBase("background", v)} /></Field>
-            <Field label="Font"><Inp value={page.s.base.fontFamily} onChange={(v) => setPageBase("fontFamily", v)} /></Field>
+            <Field label="Font"><FontPicker value={page.s.base.fontFamily} onChange={(v) => setPageBase("fontFamily", v)} api={api} /></Field>
             {/* window.confirm is blocked in sandboxed iframes, so confirm inline */}
             {confirmClear ? (
               <div className="flex gap-2">
@@ -2693,7 +3699,17 @@ export default function Editor() {
             {leftTab === "components" && <ComponentsPanel />}
             {leftTab === "layers" && (
               <div className="min-h-0 flex-1 overflow-y-auto">
-                <button onClick={() => select(PAGE_ID)} className={`mb-1 flex w-full items-center gap-1 rounded-md px-1 py-1 text-left text-xs font-medium ${selId === PAGE_ID ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`}><Ico n="page" size={14} />Page</button>
+                <button
+                  onClick={() => select(PAGE_ID)}
+                  onDragOver={(e) => {
+                    if (!e.dataTransfer.types.includes("text/x-move")) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setLayerDropTarget({ id: PAGE_ID, mode: "inside" });
+                  }}
+                  onDrop={(e) => dropLayer(e, PAGE_ID, "inside")}
+                  className={`mb-1 flex w-full items-center gap-1 rounded-md px-1 py-1 text-left text-xs font-medium ${layerDropTarget?.id === PAGE_ID ? "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-400" : selId === PAGE_ID ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`}
+                ><Ico n="page" size={14} />Page</button>
                 {page.children.map((n) => <LayerItem key={n.id} n={n} depth={1} api={api} selectedId={selId} />)}
                 {!page.children.length && <p className="p-2 text-xs text-gray-500">Nothing here yet.</p>}
               </div>
@@ -2744,7 +3760,8 @@ export default function Editor() {
       {/* right panel */}
       {selNode && !inlineEdit && (
         <div className="pointer-events-none absolute inset-0" onClick={(e) => e.stopPropagation()}>
-          <RightPanel key={selNode.id} node={selNode} device={activeDevice} stateTab={stateTab} setStateTab={setStateTab} tab={panelTab} setTab={setPanelTab} api={api} />
+          <RightPanel key={selNode.id} node={selNode} device={activeDevice} stateTab={stateTab} setStateTab={setStateTab}
+            activeNodeState={activeNodeState} setActiveNodeState={setActiveNodeState} tab={panelTab} setTab={setPanelTab} api={api} />
         </div>
       )}
 
@@ -2802,6 +3819,7 @@ export default function Editor() {
             <Ctx.Provider value={{ preview: true }}>
               <div className="rp-frame mx-auto shadow-lg" style={{ maxWidth: "100%", minHeight: "100%", ...pageStyleFor(preview), width: Math.min(widths[preview], 1600) }}>
                 <style>{FRAME_CSS}</style>
+                <FontLoader page={page} />
                 {page.children.map((n) => <Render key={n.id} n={n} device={preview} />)}
               </div>
             </Ctx.Provider>
