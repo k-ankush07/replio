@@ -26,6 +26,41 @@ const safeUrl = (u) => {
   if (!v || /^(javascript|data|vbscript):/i.test(v)) return "";
   return v;
 };
+const safeVideoSource = (src) => {
+  const value = String(src || "").trim();
+  return /^data:video\/[^;,]+(?:;[^,]*)?,/i.test(value) ? value : safeUrl(value);
+};
+const customCodePreviewDocument = (html) => {
+  const resizeScript = `<script>(()=>{const send=()=>{const body=document.body;const root=document.documentElement;parent.postMessage({type:"replio-custom-html-height",height:Math.max(root.scrollHeight,body?body.scrollHeight:0)},"*")};if(window.ResizeObserver){const observer=new ResizeObserver(send);observer.observe(document.documentElement);if(document.body)observer.observe(document.body)}window.addEventListener("load",send);window.addEventListener("message",event=>{if(event.source===parent&&event.data?.type==="replio-custom-html-measure")send()});send()})();<\/script>`;
+  const bodyEnd = /<\/body\s*>/i;
+  if (bodyEnd.test(html)) return html.replace(bodyEnd, `${resizeScript}</body>`);
+  const htmlEnd = /<\/html\s*>/i;
+  return htmlEnd.test(html) ? html.replace(htmlEnd, `${resizeScript}</html>`) : `${html}${resizeScript}`;
+};
+const videoEmbedUrl = (provider, source) => {
+  const value = safeUrl(source);
+  if (!value) return "";
+  let url;
+  try { url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`); }
+  catch { return ""; }
+  const host = url.hostname.toLowerCase();
+  const isHost = (domain) => host === domain || host.endsWith(`.${domain}`);
+  if (provider === "youtube" && (isHost("youtube.com") || isHost("youtube-nocookie.com") || isHost("youtu.be"))) {
+    const id = isHost("youtu.be")
+      ? url.pathname.split("/").filter(Boolean)[0]
+      : url.searchParams.get("v") || /\/(?:embed|shorts|live)\/([^/?]+)/.exec(url.pathname)?.[1];
+    return id && /^[\w-]{6,20}$/.test(id) ? `https://www.youtube-nocookie.com/embed/${id}` : "";
+  }
+  if (provider === "vimeo" && isHost("vimeo.com")) {
+    const id = /(?:^|\/)(\d+)(?:\/|$)/.exec(url.pathname.replace(/\/+$/, ""))?.[1];
+    return id ? `https://player.vimeo.com/video/${id}` : "";
+  }
+  if (provider === "tiktok" && isHost("tiktok.com")) {
+    const id = /\/video\/(\d+)/.exec(url.pathname)?.[1];
+    return id ? `https://www.tiktok.com/player/v1/${id}` : "";
+  }
+  return "";
+};
 const hashMarkValue = (value) => String(value || "").trim().replace(/^#+/, "");
 const RESERVED_DATA_KEYS = new Set(["url-hash", "url-hash-auto", "animation", "node", "page-section", "hover-action-type", "hover-action-value", "hover-action-new-tab"]);
 const validDataKey = (key) => {
@@ -59,8 +94,8 @@ const ICONS = {
   check: Check, arrowDown: ArrowDown, arrowRight: ArrowRight, wrap: WrapText, eye: Eye,
   upload: Upload, search: Search, close: X, text: Type, heading1: Heading1,
   heading2: Heading2, heading3: Heading3, list: List, rating: Star, container: Square,
-  button: MousePointer2, grid: Grid2X2, divider: Minus, icon: Circle, circle: Circle,
-  column: Columns2, page: FileText, heading: Heading1, slider: Images,
+  button: MousePointer2, code: Code, grid: Grid2X2, divider: Minus, icon: Circle, circle: Circle,
+  column: Columns2, page: FileText, heading: Heading1, slider: Images, video: Video, timer: Clock,
 };
 const ICON_CHOICES = [
   ["Activity", "Activity", Activity], ["Airplay", "Airplay", Airplay],
@@ -132,6 +167,40 @@ const Row = (name, children = [], base = {}, mob = {}) =>
   Box(name, children, { flexDirection: "row", ...base }, { flexDirection: "column", ...mob });
 const Img = (src, base = {}) =>
   node("image", "Image", { src, alt: "" }, { width: "100%", objectFit: "cover", borderRadius: "12px", ...base });
+const VideoPlayer = (sourceType = "file") =>
+  node("video", "Video Player", { sourceType, src: "", controls: true, autoplay: false, muted: false, loop: false, poster: "" }, {
+    width: "100%", aspectRatio: "16 / 9", background: "#111827", borderRadius: "8px", overflow: "hidden",
+  });
+const COUNTDOWN_UNITS = [["days", "Days"], ["hours", "Hours"], ["minutes", "Minutes"], ["seconds", "Seconds"]];
+const localDateTimeValue = (date) => {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+};
+const countdownDurationSeconds = (p) =>
+  Math.max(0, parseInt(p.days, 10) || 0) * 86400 +
+  Math.max(0, parseInt(p.hours, 10) || 0) * 3600 +
+  Math.max(0, parseInt(p.minutes, 10) || 0) * 60 +
+  Math.max(0, parseInt(p.seconds, 10) || 0);
+const countdownRemainingSeconds = (p, now, startedAt = now) => {
+  if (p.mode === "afterLoad") return Math.max(0, countdownDurationSeconds(p) - Math.floor((now - startedAt) / 1000));
+  const target = new Date(p.targetAt).getTime();
+  return Number.isFinite(target) ? Math.max(0, Math.ceil((target - now) / 1000)) : 0;
+};
+const countdownParts = (totalSeconds) => {
+  const total = Math.max(0, Math.floor(totalSeconds) || 0);
+  return {
+    days: Math.floor(total / 86400),
+    hours: Math.floor((total % 86400) / 3600),
+    minutes: Math.floor((total % 3600) / 60),
+    seconds: total % 60,
+  };
+};
+const buildCountdown = () => {
+  const targetAt = localDateTimeValue(new Date(Date.now() + 10 * 86400000));
+  return node("countdown", "Countdown Timer", { mode: "specific", targetAt, days: 0, hours: 0, minutes: 15, seconds: 0 }, {
+    width: "100%", display: "flex", justifyContent: "center", alignItems: "center", gap: "8px",
+  });
+};
 const Stars = (rating = 5, base = {}) =>
   node("stars", "Star Rating", { rating }, { color: "#f59e0b", fontSize: "20px", letterSpacing: "2px", ...base });
 const Card = (icon, title, text) =>
@@ -174,6 +243,10 @@ const COMPONENTS = [
   },
   { key: "starstext", label: "Stars + Text", glyph: "rating", build: () => Row("Stars + Text", [Stars(5), T("4.9 from 2,000+ reviews", { fontSize: "14px" })], { alignItems: "center", gap: "8px" }, { flexDirection: "row" }) },
   { key: "image", label: "Image", glyph: "image", build: () => Img(ph(800, 600), { height: "auto" }) },
+  { key: "video-file", label: "Video File", glyph: "video", build: () => VideoPlayer("file") },
+  { key: "vimeo", label: "Vimeo", searchTerms: "video", glyph: "video", build: () => VideoPlayer("vimeo") },
+  { key: "youtube", label: "YouTube", searchTerms: "video", glyph: "video", build: () => VideoPlayer("youtube") },
+  { key: "tiktok", label: "TikTok", searchTerms: "video", glyph: "video", build: () => VideoPlayer("tiktok") },
   { key: "slider", label: "Slider", glyph: "slider", build: buildSlider },
   { key: "container", label: "Container", glyph: "container", build: () => Box("Container", [], { padding: "24px", border: "1px dashed #d1d5db", borderRadius: "8px" }) },
   { key: "button", label: "Button", glyph: "button", build: () => Btn("Click me") },
@@ -264,7 +337,63 @@ const buyBox = (extra = []) =>
     Row("Price", [productPrice(), compareAt()], { gap: "12px", alignItems: "center", width: "auto" }, { flexDirection: "row" }),
     productDesc(), ...extra, qtySelector(), addToCart(), buyNow(),
   ], { gap: "14px" });
-const bundleBuilder = (name) =>
+const bundleBuilder = (name) => {
+  const tier = (count, discount, selected = false) =>
+    Row("Bundle Tier", [
+      node("circle", "Tier Radio", {}, {
+        width: "14px", height: "14px", flexShrink: "0", borderRadius: "50%",
+        border: `1px solid ${selected ? "#2563eb" : "#cbd5e1"}`,
+        background: selected ? "#2563eb" : "#ffffff",
+      }),
+      Box("Tier Details", [
+        T(`${count} items`, { fontWeight: "600", color: "#111827", fontSize: "13px" }),
+        T(`${discount} off`, { color: "#64748b", fontSize: "11px" }),
+      ], { gap: "2px" }),
+    ], {
+      alignItems: "center", gap: "10px", padding: "10px 12px",
+      border: `1px solid ${selected ? "#2563eb" : "#e2e8f0"}`,
+      borderRadius: "8px", background: selected ? "#eff6ff" : "#ffffff",
+    }, { flexDirection: "row" });
+
+  const slots = Box("Bundle Slots", [1, 2, 3].map((i) =>
+    Box(`Bundle Slot ${i}`, [
+      T("+", { color: "#64748b", fontSize: "20px", fontWeight: "400", textAlign: "center" }),
+    ], {
+      minHeight: "68px", alignItems: "center", justifyContent: "center",
+      border: "1px dashed #cbd5e1", borderRadius: "8px", background: "#f8fafc",
+    })), {
+    display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "10px",
+  });
+
+  const root = Box(name, [
+    Box("Bundle Preview", [
+      T("Your bundle", { color: "#111827", fontSize: "14px", fontWeight: "600" }),
+      slots,
+      T("0 of 3 items added", { color: "#64748b", fontSize: "12px", textAlign: "center" }),
+    ], { justifyContent: "center", gap: "16px", padding: "20px" }, { padding: "4px" }),
+    Box("Bundle Options", [
+      H("Build Your Bundle", 18, { color: "#111827" }, { fontSize: "18px" }, "h2"),
+      T("Choose a bundle size and add your favorite items.", { color: "#64748b", fontSize: "13px", lineHeight: "1.5" }),
+      Box("Bundle Tiers", [tier(3, "10%"), tier(5, "20%")], { gap: "8px" }),
+      T("Select items to fill your bundle.", { color: "#64748b", fontSize: "11px" }),
+      Btn("Add 3 items to continue", {
+        width: "100%", padding: "11px 14px", background: "#9ca3af",
+        borderRadius: "8px", fontSize: "12px", cursor: "not-allowed",
+      }),
+    ], {
+      alignSelf: "center", gap: "12px", padding: "16px",
+      border: "1px solid #e5e7eb", borderRadius: "10px",
+      background: "#ffffff", boxShadow: "0 2px 8px rgba(15,23,42,.05)",
+    }, { padding: "16px" }),
+  ], {
+    display: "grid", gridTemplateColumns: "minmax(0, 1fr) clamp(170px, 32%, 320px)",
+    alignItems: "stretch", gap: "24px", padding: "24px",
+    border: "1px solid #e5e7eb", borderRadius: "12px", background: "#ffffff",
+  }, { gridTemplateColumns: "1fr", gap: "16px", padding: "16px" });
+  root.props.bundleDesignVersion = 2;
+  return root;
+};
+const legacyBundleBuilder = (name) =>
   Box(name, [
     H("Build your bundle", 28, {}, { fontSize: "24px" }, "h2"),
     grid("Bundle Items", 3, [1, 2, 3].map((i) =>
@@ -373,6 +502,45 @@ SHOPIFY_COMPONENTS.forEach((c) => { if (!COMPONENTS.some((x) => x.key === c.key)
    ====================================================================== */
 
 const dot = (on) => node("circle", "Dot", {}, { width: "10px", height: "10px", borderRadius: "9999px", background: on ? "#2563eb" : "#d1d5db", flexShrink: "0" });
+const buildPopup = () => {
+  const image = Img(ph(900, 1100, "Offer Image"), {
+    width: "100%", height: "100%", objectFit: "cover", minHeight: "360px",
+  });
+  image.s.tablet = { ...image.s.tablet, height: "280px", minHeight: "0" };
+  image.s.mobile = { ...image.s.mobile, height: "180px", minHeight: "0" };
+  const offer = Box("Popup Offer", [
+    T("UNLOCK", { color: "#475569", fontSize: "11px", letterSpacing: "0.55em", textAlign: "center" }),
+    H("30% OFF", 38, { color: "#111827", fontWeight: "600", textAlign: "center" }, { fontSize: "32px" }, "h2"),
+    T("Sign up for our emails and get 30% off your first order.", { color: "#475569", fontSize: "13px", lineHeight: "1.5", textAlign: "center" }),
+    Btn("GET DISCOUNT CODE", {
+      width: "100%", padding: "14px 18px", background: "#45b98b",
+      color: "#ffffff", fontSize: "11px", fontWeight: "700",
+      letterSpacing: "0.06em", borderRadius: "2px",
+    }),
+    T("By entering your email, you agree to receive marketing emails.", { color: "#94a3b8", fontSize: "9px", textAlign: "center" }),
+  ], { alignItems: "center", justifyContent: "center", gap: "16px", padding: "36px" }, { padding: "20px" }, { padding: "24px" });
+  return node("container", "Popup", {
+    tag: "div", isPopup: true, popupDelay: 0, popupCloseOnBackdrop: true,
+    popupCloseOnEscape: true, popupOverlayColor: "rgba(86, 96, 114, 0.58)",
+    ariaLabel: "Special offer",
+  }, {
+    width: "min(760px, calc(100% - 48px))", maxWidth: "760px",
+    display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+    overflow: "hidden", background: "#ffffff", borderRadius: "4px",
+    boxShadow: "0 24px 80px rgba(0,0,0,.24)", maxHeight: "calc(100vh - 48px)",
+    position: "relative",
+  }, [
+    image,
+    offer,
+  ], {
+    width: "min(420px, calc(100% - 24px))", maxWidth: "420px",
+    gridTemplateColumns: "1fr", maxHeight: "calc(100vh - 24px)",
+  }, {
+    width: "min(640px, calc(100% - 40px))", maxWidth: "640px",
+    gridTemplateColumns: "minmax(0, .9fr) minmax(0, 1.1fr)",
+    maxHeight: "calc(100vh - 40px)",
+  });
+};
 const arrowBtn = (name, glyph) =>
   node("button", name, { text: glyph, action: { type: "none", value: "" } },
     { width: "40px", height: "40px", borderRadius: "9999px", border: "none", background: "#2563eb", color: "#ffffff", fontSize: "20px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: "0" });
@@ -431,18 +599,8 @@ const SHOPIFY_COMPONENTS_2 = [
   { key: "accordion", label: "Accordion", glyph: "list", build: () =>
       Box("Accordion", ["First question", "Second question", "Third question"].map((q) =>
         FAQItem(q, "Answer text goes here.")), { gap: "0px" }) },
-  { key: "countdown", label: "Countdown Timer", glyph: "text", build: () =>
-      Row("Countdown Timer", [["19", "Hours"], ["20", "Mins"], ["45", "Secs"]].map(([n, l]) =>
-        Box("Unit", [T(n, { fontSize: "36px", fontWeight: "700", color: "#2563eb", textAlign: "center", lineHeight: "1" }), T(l, { fontSize: "12px", color: "#6b7280", textAlign: "center" })],
-          { alignItems: "center", gap: "4px", padding: "12px 16px", background: "#eff6ff", borderRadius: "8px", width: "auto" })),
-        { gap: "12px", justifyContent: "center" }, { flexDirection: "row" }) },
-  { key: "popup", label: "Popup", glyph: "container", build: () =>
-      Box("Popup", [
-        T("✕", { textAlign: "right", color: "#6b7280", cursor: "pointer" }),
-        H("Get 10% off", 28, { textAlign: "center" }, { fontSize: "24px" }),
-        T("Join our list and save on your first order.", { textAlign: "center" }),
-        Btn("Claim offer", { width: "100%" }),
-      ], { maxWidth: "420px", margin: "0 auto", padding: "24px", background: "#ffffff", borderRadius: "16px", boxShadow: "0 20px 40px rgba(0,0,0,.2)", gap: "12px" }) },
+  { key: "countdown", label: "Countdown Timer", glyph: "timer", build: buildCountdown },
+  { key: "popup", label: "Popup", glyph: "container", build: buildPopup },
   { key: "tooltip", label: "Tooltip", glyph: "text", build: () =>
       Box("Tooltip", [
         T("Helpful hint appears here", { background: "#111827", color: "#ffffff", fontSize: "13px", padding: "8px 12px", borderRadius: "6px", width: "fit-content" }),
@@ -484,8 +642,11 @@ const SHOPIFY_COMPONENTS_2 = [
       placeholderBox("App and Theme Block", "App / Theme Block", "Renders an app or theme block from your Shopify store.") },
   { key: "liquid", label: "Liquid", glyph: "text", build: () =>
       placeholderBox("Liquid", "{ } Liquid", "Liquid code runs on Shopify only. Not rendered in this editor.", { fontFamily: "monospace" }) },
-  { key: "customcode", label: "Custom Code", glyph: "text", build: () =>
-      placeholderBox("Custom Code", "</> Custom Code", "Custom HTML / CSS / JS block. Not rendered in this editor.", { fontFamily: "monospace" }) },
+  { key: "customcode", label: "Custom Code", searchTerms: "html", glyph: "code", build: () =>
+      node("customCode", "HTML Content", { html: "" }, {
+        width: "100%", minHeight: "120px", border: "1px dashed #cbd5e1",
+        borderRadius: "8px", background: "#f9fafb",
+      }) },
 
   /* ---- third-party apps (placeholders) ---- */
   { key: "knocommerce", label: "KnoCommerce", glyph: "container", build: () =>
@@ -692,8 +853,30 @@ const fixProps = (n) => {
   if (n.type !== "slider") return props;
   return { ...SLIDER_DEFAULTS, ...props, slides: (Array.isArray(props.slides) ? props.slides : []).map(fixSlide) };
 };
+const normalizeBundleNode = (n) => {
+  const props = { ...(n.props || {}) };
+  if (Array.isArray(props.componentStates) && props.componentStates.length === 0) delete props.componentStates;
+  const sortObject = (value) => {
+    if (Array.isArray(value)) return value.map(sortObject);
+    if (value && typeof value === "object") {
+      return Object.keys(value).sort().reduce((sorted, key) => {
+        sorted[key] = sortObject(value[key]);
+        return sorted;
+      }, {});
+    }
+    return value;
+  };
+  return sortObject({
+    type: n.type, name: n.name, props, s: n.s || {}, hide: n.hide || {},
+    children: (Array.isArray(n.children) ? n.children : []).map(normalizeBundleNode),
+  });
+};
 const fixNode = (n) => {
   const children = Array.isArray(n.children) ? n.children : [];
+  const isLegacyBundle = n.type === "container" && ["Collection Bundle Builder", "PDP Bundle Builder"].includes(n.name)
+    && !n.props?.bundleDesignVersion
+    && JSON.stringify(normalizeBundleNode(n)) === JSON.stringify(normalizeBundleNode(legacyBundleBuilder(n.name)));
+  const bundleReplacement = isLegacyBundle ? bundleBuilder(n.name) : null;
   const legacyFaqItem = n.type === "container" && n.name === "FAQ Item"
     && children.length === 3 && children[0]?.type === "heading" && children[1]?.type === "text" && children[2]?.type === "hr";
   const legacyAccordionItem = n.type === "container" && n.name === "Accordion Item"
@@ -704,7 +887,14 @@ const fixNode = (n) => {
   const answerNode = n.name === "Accordion Item"
     ? children.find((child, index) => index > 0 && child.type === "text")
     : children[1];
-  const migrated = (legacyFaqItem || legacyAccordionItem) && questionNode?.props?.text != null && answerNode?.props?.text != null
+  const migrated = bundleReplacement
+    ? {
+      ...n,
+      props: { ...(n.props || {}), bundleDesignVersion: 2 },
+      s: bundleReplacement.s,
+      children: bundleReplacement.children,
+    }
+    : (legacyFaqItem || legacyAccordionItem) && questionNode?.props?.text != null && answerNode?.props?.text != null
     ? {
       ...n,
       type: "faq",
@@ -720,13 +910,26 @@ const fixNode = (n) => {
     }
     : n;
   const props = fixProps(migrated);
+  const isPopup = migrated.type === "container" && (props.isPopup || migrated.name === "Popup");
+  const popupProps = isPopup
+    ? {
+      isPopup: true, popupDelay: 0, popupCloseOnBackdrop: true, popupCloseOnEscape: true,
+      popupOverlayColor: "rgba(86, 96, 114, 0.58)", ...props,
+    }
+    : props;
+  const styles = { base: {}, tablet: {}, mobile: {}, hover: {}, ...(migrated.s || {}) };
+  if (isPopup) {
+    if (styles.base.width === "min(760px, calc(100vw - 48px))") styles.base.width = "min(760px, calc(100% - 48px))";
+    if (styles.tablet.width === "min(640px, calc(100vw - 40px))") styles.tablet.width = "min(640px, calc(100% - 40px))";
+    if (styles.mobile.width === "min(420px, calc(100vw - 24px))") styles.mobile.width = "min(420px, calc(100% - 24px))";
+  }
   return {
     ...migrated,
     id: migrated.id || uid(),
     type: migrated.type || "container",
     name: migrated.name || migrated.type || "Layer",
-    props: { ...props, componentStates: Array.isArray(props.componentStates) ? props.componentStates : [] },
-    s: { base: {}, tablet: {}, mobile: {}, hover: {}, ...(migrated.s || {}) },
+    props: { ...popupProps, componentStates: Array.isArray(popupProps.componentStates) ? popupProps.componentStates : [] },
+    s: styles,
     hide: migrated.hide || {},
     children: (Array.isArray(migrated.children) ? migrated.children : []).map(fixNode),
   };
@@ -800,7 +1003,74 @@ const FAQ_CSS =
   ".rp-faq>summary:after{content:'+';font-size:20px;line-height:1}" +
   ".rp-faq[open]>summary:after{content:'−'}" +
   ".rp-faq-answer{margin-top:8px;white-space:pre-wrap}";
-const FRAME_CSS = ".rp-frame *{box-sizing:border-box}.rp-frame :where(h1,h2,h3,h4,h5,h6,p,ul,hr){margin:0}.rp-frame button{font-family:inherit}" + FAQ_CSS + SLIDER_CSS + ANIMATION_CSS;
+const COUNTDOWN_CSS =
+  ".rp-countdown{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}" +
+  ".rp-countdown-unit{display:flex;min-width:42px;flex-direction:column;align-items:center;gap:4px}" +
+  ".rp-countdown-value{display:block;min-width:2.4em;padding:8px 10px;border:1px solid #e5e7eb;border-radius:4px;background:#fff;color:#111827;font-size:32px;font-weight:600;line-height:1;text-align:center;font-variant-numeric:tabular-nums}" +
+  ".rp-countdown-label{color:#6b7280;font-size:10px;letter-spacing:.04em;text-transform:uppercase}" +
+  ".rp-countdown-separator{align-self:center;margin-bottom:14px;color:#6b7280;font-size:20px;line-height:1}" +
+  "@media(max-width:480px){.rp-countdown{gap:4px}.rp-countdown-value{padding:7px 8px;font-size:24px}.rp-countdown-separator{margin-bottom:12px;font-size:16px}}";
+const COUNTDOWN_JS = `(function(){
+document.querySelectorAll("[data-countdown]").forEach(function(root){
+var mode=root.getAttribute("data-countdown-type");
+var target=new Date(root.getAttribute("data-countdown-target")||"").getTime();
+var duration=(parseInt(root.getAttribute("data-countdown-days"),10)||0)*86400+
+(parseInt(root.getAttribute("data-countdown-hours"),10)||0)*3600+
+(parseInt(root.getAttribute("data-countdown-minutes"),10)||0)*60+
+(parseInt(root.getAttribute("data-countdown-seconds"),10)||0);
+var started=Date.now(),timer=null;
+function update(){
+var left=mode==="afterLoad"?duration-Math.floor((Date.now()-started)/1000):Math.ceil((target-Date.now())/1000);
+left=Math.max(0,isFinite(left)?left:0);
+var values={days:Math.floor(left/86400),hours:Math.floor((left%86400)/3600),minutes:Math.floor((left%3600)/60),seconds:left%60};
+Object.keys(values).forEach(function(unit){
+var node=root.querySelector('[data-countdown-unit="'+unit+'"] .rp-countdown-value');
+if(node)node.textContent=values[unit]<10?"0"+values[unit]:String(values[unit]);
+});
+if(left<=0&&timer){clearInterval(timer);timer=null;}
+}
+update();
+if((mode==="afterLoad"&&duration>0)||(mode!=="afterLoad"&&isFinite(target)&&target>Date.now()))timer=setInterval(update,1000);
+});
+})();`;
+const POPUP_CSS =
+  ".rp-popup-overlay{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.58)}" +
+  ".rp-popup-dialog{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);width:min(760px,100%);max-height:calc(100vh - 48px);overflow:auto;background:#fff;box-shadow:0 24px 80px rgba(0,0,0,.24)}" +
+  ".rp-popup-dialog>img{display:block;width:100%;height:100%;object-fit:cover}" +
+  ".rp-popup-close{position:absolute;top:8px;right:8px;z-index:2;display:flex;width:28px;height:28px;align-items:center;justify-content:center;border:0;border-radius:50%;background:rgba(255,255,255,.92);color:#64748b;font-size:18px;line-height:1;cursor:pointer}" +
+  "@media(max-width:600px){.rp-popup-overlay{padding:12px}.rp-popup-dialog{grid-template-columns:1fr;max-height:calc(100vh - 24px)}.rp-popup-dialog>img{max-height:220px}}";
+const POPUP_JS = `(function(){
+document.querySelectorAll("[data-popup]").forEach(function(root){
+var dialog=root.querySelector(".rp-popup-dialog");
+var close=root.querySelector(".rp-popup-close");
+var section=dialog&&dialog.parentElement.closest("[data-page-section='true']");
+var delay=Math.max(0,parseFloat(root.getAttribute("data-popup-delay"))||0);
+var closeBackdrop=root.getAttribute("data-popup-backdrop")!=="0";
+var closeEscape=root.getAttribute("data-popup-escape")!=="0";
+function alignToSection(){
+if(!section||!dialog)return;
+var rect=section.getBoundingClientRect(),box=dialog.getBoundingClientRect();
+var leftEdge=Math.max(0,rect.left),rightEdge=Math.min(window.innerWidth,rect.right);
+var topEdge=Math.max(0,rect.top),bottomEdge=Math.min(window.innerHeight,rect.bottom);
+var left=rightEdge>leftEdge?(leftEdge+rightEdge)/2:window.innerWidth/2;
+var top=bottomEdge>topEdge?(topEdge+bottomEdge)/2:window.innerHeight/2;
+var insetX=Math.min(box.width/2+12,window.innerWidth/2),insetY=Math.min(box.height/2+12,window.innerHeight/2);
+dialog.style.position="fixed";dialog.style.left=Math.max(insetX,Math.min(window.innerWidth-insetX,left))+"px";
+dialog.style.top=Math.max(insetY,Math.min(window.innerHeight-insetY,top))+"px";
+dialog.style.transform="translate(-50%,-50%)";
+}
+function show(){root.style.display="flex";root.setAttribute("aria-hidden","false");alignToSection();if(close)close.focus();}
+function hide(){root.style.display="none";root.setAttribute("aria-hidden","true");}
+if(close)close.addEventListener("click",hide);
+if(closeBackdrop)root.addEventListener("click",function(event){if(event.target===root)hide();});
+if(closeEscape)document.addEventListener("keydown",function(event){if(event.key==="Escape"&&root.getAttribute("aria-hidden")==="false")hide();});
+window.addEventListener("resize",alignToSection);
+window.addEventListener("scroll",alignToSection,true);
+if(section&&window.ResizeObserver){var observer=new ResizeObserver(alignToSection);observer.observe(section);observer.observe(dialog);}
+window.setTimeout(show,delay);
+});
+})();`;
+const FRAME_CSS = ".rp-frame *{box-sizing:border-box}.rp-frame :where(h1,h2,h3,h4,h5,h6,p,ul,hr){margin:0}.rp-frame button{font-family:inherit}" + FAQ_CSS + SLIDER_CSS + COUNTDOWN_CSS + POPUP_CSS + ANIMATION_CSS;
 
 /* tiny dependency-free script for the exported page (ES5 on purpose) */
 const SLIDER_JS = `(function(){
@@ -888,18 +1158,20 @@ if(type==="scroll"){var target=document.getElementById(value);if(target)target.s
 })();`;
 
 function exportHTML(page) {
-  let base = "", tab = "", mob = "", hov = "", hide = "", usesTw = false, usesSlider = false, usesHashMark = false, usesHoverAction = false, usesJQuery = false;
+  let base = "", tab = "", mob = "", hov = "", hide = "", usesTw = false, usesSlider = false, usesCountdown = false, usesPopup = false, usesHashMark = false, usesHoverAction = false, usesJQuery = false;
   const customScripts = [];
-  const el = (n) => {
+  const el = (n, isPageSection = false) => {
     const cls = "n-" + n.id;
     const p = n.props;
     if (p.className) usesTw = true;
+    if (p.isPopup) usesPopup = true;
     if (typeof p.customJs === "string" && p.customJs.trim()) {
       customScripts.push({ selector: `.${cls}`, code: p.customJs });
       usesJQuery = usesJQuery || !!p.loadJQuery;
     }
     const isSlider = n.type === "slider";
     if (isSlider) usesSlider = true;
+    if (n.type === "countdown") usesCountdown = true;
     const zoomScale = n.type === "image" && p.zoom != null ? imageZoomScaleOf(p.zoom) : 1;
     const zoomedImage = n.type === "image" && zoomScale !== 1;
     const hashMark = n.type === "container" ? hashMarkValue(p.urlHashMark) : "";
@@ -910,6 +1182,7 @@ function exportHTML(page) {
       (n.s.base.minWidth == null ? "min-width:0;" : "") +
       (n.type === "text" && !n.s.base.whiteSpace ? "white-space:pre-wrap;" : "") +
       (n.type === "image" && n.s.base.maxWidth == null ? "max-width:100%;" : "") +
+      (n.type === "video" && n.s.base.display == null ? "display:block;max-width:100%;" : "") +
       (isSlider && n.s.base.position == null ? "position:relative;" : "") +
       (isSlider && n.s.base.overflow == null ? "overflow:hidden;" : "") +
       (isSlider && n.s.base.height == null && n.s.base.aspectRatio == null ? "aspect-ratio:16/9;" : "") +
@@ -941,10 +1214,12 @@ function exportHTML(page) {
     if (n.hide.desktop) hide += `@media(min-width:1025px){.${cls}{display:none!important}}`;
     if (n.hide.tablet) hide += `@media(min-width:481px) and (max-width:1024px){.${cls}{display:none!important}}`;
     if (n.hide.mobile) hide += `@media(max-width:480px){.${cls}{display:none!important}}`;
-    let a = ` class="${cls}${n.type === "faq" ? " rp-faq" : ""}${p.className ? " " + esc(p.className) : ""}"`;
+    let a = ` class="${cls}${n.type === "faq" ? " rp-faq" : ""}${n.type === "countdown" ? " rp-countdown" : ""}${p.isPopup ? " rp-popup-dialog" : ""}${p.className ? " " + esc(p.className) : ""}"`;
     if (p.htmlId || hashMark) a += ` id="${esc(p.htmlId || hashMark)}"`;
     if (p.ariaLabel) a += ` aria-label="${esc(p.ariaLabel)}"`;
-    if (p.role) a += ` role="${esc(p.role)}"`;
+    if (p.role || p.isPopup) a += ` role="${esc(p.role || "dialog")}"`;
+    if (p.isPopup) a += ' aria-modal="true"';
+    if (isPageSection) a += ' data-page-section="true"';
     if (p.title) a += ` title="${esc(p.title)}"`;
     for (const [key, value] of dataAttrsOf(p.dataset)) a += ` ${key}="${esc(value)}"`;
     if (hashMark) a += ` data-url-hash="${esc(hashMark)}"${p.autoUrlHashMark ? " data-url-hash-auto" : ""}`;
@@ -957,6 +1232,35 @@ function exportHTML(page) {
     if (act && act.type === "link" && val) a += ` onclick="${esc(`window.open(${JSON.stringify(val)},${act.newTab ? '"_blank"' : '"_self"'})`)}" style="cursor:pointer"`;
     if (act && act.type === "scroll" && val) a += ` onclick="${esc(`document.getElementById(${JSON.stringify(val)})?.scrollIntoView({behavior:'smooth'})`)}" style="cursor:pointer"`;
     switch (n.type) {
+      case "customCode": // Custom Code intentionally exports author-provided HTML.
+        return `<div${a}>${typeof p.html === "string" ? p.html : ""}</div>`;
+      case "countdown": {
+        const now = Date.now();
+        const initial = countdownParts(countdownRemainingSeconds(p, now, now));
+        const mode = p.mode === "afterLoad" ? "afterLoad" : "specific";
+        const attrs = ` data-countdown data-countdown-type="${mode}" data-countdown-target="${esc(p.targetAt || "")}"` +
+          COUNTDOWN_UNITS.map(([unit]) => ` data-countdown-${unit}="${Math.max(0, parseInt(p[unit], 10) || 0)}"`).join("");
+        const units = COUNTDOWN_UNITS.map(([unit, label], index) =>
+          `<div class="rp-countdown-unit" data-countdown-unit="${unit}"><span class="rp-countdown-value">${String(initial[unit]).padStart(2, "0")}</span><span class="rp-countdown-label">${label}</span></div>${index < COUNTDOWN_UNITS.length - 1 ? '<span class="rp-countdown-separator" aria-hidden="true">:</span>' : ""}`
+        ).join("");
+        return `<div${a}${attrs}>${units}</div>`;
+      }
+      case "video": {
+        const sourceType = p.sourceType || "file";
+        const embedSrc = ["youtube", "vimeo", "tiktok"].includes(sourceType) ? videoEmbedUrl(sourceType, p.src) : "";
+        if (embedSrc) {
+          return `<iframe${a} src="${esc(embedSrc)}" title="${esc(p.title || "Video Player")}" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>`;
+        }
+        const src = ["file", "url"].includes(sourceType) ? safeVideoSource(p.src) : "";
+        if (!src) return `<div${a}>${sourceType === "file" || sourceType === "url" ? "Add a video URL or upload a video." : `Enter a valid ${esc(sourceType)} video URL.`}</div>`;
+        const videoAttrs =
+          `${p.controls !== false ? " controls" : ""}` +
+          `${p.autoplay ? " autoplay" : ""}` +
+          `${p.loop ? " loop" : ""}` +
+          `${p.muted ? " muted" : ""}` +
+          ` playsinline${safeUrl(p.poster) ? ` poster="${esc(safeUrl(p.poster))}"` : ""}`;
+        return `<video${a} src="${esc(src)}"${videoAttrs}>Your browser does not support the video element.</video>`;
+      }
       case "image": {
         const fitClass = imageFitClassesOf(p.className);
         const image = `<img${fitClass ? ` class="${esc(fitClass)}"` : ""} src="${esc(p.src)}" alt="${esc(p.alt)}">`;
@@ -996,10 +1300,17 @@ function exportHTML(page) {
           : "";
         return `<div${a}${extra}><div class="rp-sl-sizer" aria-hidden="true"></div><div class="rp-sl-track">${track}</div>${arrows}${dots}</div>`;
       }
-      default: { const tag = p.tag || "div"; return `<${tag}${a}>${p.text ? esc(p.text) : ""}${n.children.map(el).join("")}</${tag}>`; }
+      default: {
+        const tag = p.tag || "div";
+        const content = `${p.text ? esc(p.text) : ""}${p.isPopup ? '<button type="button" class="rp-popup-close" aria-label="Close popup">×</button>' : ""}${n.children.map((child) => el(child)).join("")}`;
+        const dialog = `<${tag}${a}>${content}</${tag}>`;
+        return p.isPopup
+          ? `<div class="rp-popup-overlay" data-popup data-popup-delay="${Math.max(0, Number(p.popupDelay) || 0) * 1000}" data-popup-backdrop="${p.popupCloseOnBackdrop === false ? "0" : "1"}" data-popup-escape="${p.popupCloseOnEscape === false ? "0" : "1"}" aria-hidden="true" style="display:none;background:${esc(popupOverlayColorOf(p.popupOverlayColor))}">${dialog}</div>`
+          : dialog;
+      }
     }
   };
-  const body = page.children.map(el).join("\n");
+  const body = page.children.map((child) => el(child, true)).join("\n");
   const customJsCode = customScripts.map(({ selector, code }) =>
     `(function(root){if(!root)return;\n${code}\n})(document.querySelector(${JSON.stringify(selector)}));`
   ).join("\n");
@@ -1023,6 +1334,8 @@ ${usesTw ? '<script src="https://cdn.tailwindcss.com"></script>\n' : ""}${gFonts
 ${RESET}
 ${customFontCss(page.fonts)}
 ${FAQ_CSS}
+${usesCountdown ? COUNTDOWN_CSS : ""}
+${usesPopup ? POPUP_CSS : ""}
 ${ANIMATION_CSS}
 ${usesSlider ? SLIDER_CSS : ""}
 body{margin:0;background:${ps.base.background || "#ffffff"};font-family:${ps.base.fontFamily || "system-ui,sans-serif"}}
@@ -1037,7 +1350,7 @@ ${hide}
 <div class="n-page">
 ${body}
 </div>
-${usesSlider ? `<script>\n${SLIDER_JS}\n</script>\n` : ""}${usesHashMark ? `<script>\n${HASH_MARK_JS}\n</script>\n` : ""}${usesHoverAction ? `<script>\n${HOVER_ACTION_JS}\n</script>\n` : ""}${usesJQuery ? '<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>\n' : ""}${customJsCode ? `<script>\n${safeCustomJsCode}\n</script>\n` : ""}</body>
+${usesSlider ? `<script>\n${SLIDER_JS}\n</script>\n` : ""}${usesCountdown ? `<script>\n${COUNTDOWN_JS}\n</script>\n` : ""}${usesPopup ? `<script>\n${POPUP_JS}\n</script>\n` : ""}${usesHashMark ? `<script>\n${HASH_MARK_JS}\n</script>\n` : ""}${usesHoverAction ? `<script>\n${HOVER_ACTION_JS}\n</script>\n` : ""}${usesJQuery ? '<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>\n' : ""}${customJsCode ? `<script>\n${safeCustomJsCode}\n</script>\n` : ""}</body>
 </html>`;
 }
 
@@ -1152,13 +1465,232 @@ function SliderView({ n, common, preview, device }) {
   );
 }
 
+function CountdownView({ n, common }) {
+  const { mode, targetAt, days, hours, minutes, seconds } = n.props;
+  const [now, setNow] = useState(() => Date.now());
+  const startedAtRef = useRef(Date.now());
+  useEffect(() => {
+    const startedAt = Date.now();
+    const props = { mode, targetAt, days, hours, minutes, seconds };
+    startedAtRef.current = startedAt;
+    setNow(startedAt);
+    if (countdownRemainingSeconds(props, startedAt, startedAt) <= 0) return undefined;
+    const timer = window.setInterval(() => {
+      const current = Date.now();
+      setNow(current);
+      if (countdownRemainingSeconds(props, current, startedAt) <= 0) window.clearInterval(timer);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [mode, targetAt, days, hours, minutes, seconds]);
+  const values = countdownParts(countdownRemainingSeconds(n.props, now, startedAtRef.current));
+  return (
+    <div {...common} className={[common.className, "rp-countdown"].filter(Boolean).join(" ")}>
+      {COUNTDOWN_UNITS.map(([unit, label], index) => (
+        <React.Fragment key={unit}>
+          <div className="rp-countdown-unit" data-countdown-unit={unit}>
+            <span className="rp-countdown-value">{String(values[unit]).padStart(2, "0")}</span>
+            <span className="rp-countdown-label">{label}</span>
+          </div>
+          {index < COUNTDOWN_UNITS.length - 1 && <span className="rp-countdown-separator" aria-hidden="true">:</span>}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+const popupDismissalKeyOf = (id, device) => `replio:popup-dismissed:${id}:${device}`;
+const popupWasDismissed = (key) => {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(key) === "true";
+  } catch (error) {
+    console.error("Unable to read popup dismissal state.", error);
+    return false;
+  }
+};
+const savePopupDismissal = (key) => {
+  try {
+    window.localStorage.setItem(key, "true");
+  } catch (error) {
+    console.error("Unable to save popup dismissal state.", error);
+  }
+};
+
+function PopupView({ n, device, dialogProps, children }) {
+  const c = useContext(Ctx);
+  const dismissalKey = popupDismissalKeyOf(n.id, device);
+  const [open, setOpen] = useState(() => !c.preview && !popupWasDismissed(dismissalKey));
+  const [portalTarget, setPortalTarget] = useState(null);
+  const [dialogPosition, setDialogPosition] = useState(null);
+  const closeRef = useRef(null);
+  const dialogRef = useRef(null);
+  const anchorRef = useRef(null);
+  const sectionRef = useRef(null);
+  const p = n.props;
+  useEffect(() => {
+    if (!c.preview) {
+      setOpen(!popupWasDismissed(dismissalKey));
+      return undefined;
+    }
+    setOpen(false);
+    const timer = window.setTimeout(() => setOpen(true), Math.max(0, Number(p.popupDelay) || 0) * 1000);
+    return () => window.clearTimeout(timer);
+  }, [c.preview, dismissalKey, p.popupDelay]);
+  useEffect(() => {
+    const marker = anchorRef.current;
+    const target = marker?.closest(".rp-frame") || null;
+    sectionRef.current = marker?.closest('[data-page-section="true"]') || null;
+    setPortalTarget((current) => current === target ? current : target);
+  }, [n.id, device, dialogProps.style]);
+  useEffect(() => {
+    if (!portalTarget || !open) return undefined;
+    const dialog = dialogRef.current;
+    if (!dialog) return undefined;
+    const frame = portalTarget;
+    const section = sectionRef.current;
+    const updatePosition = () => {
+      const frameRect = frame.getBoundingClientRect();
+      const frameWidth = frame.clientWidth || frame.offsetWidth || frameRect.width;
+      const frameHeight = frame.clientHeight || frame.offsetHeight || frameRect.height;
+      const scaleX = frameWidth ? frameRect.width / frameWidth : 1;
+      const scaleY = frameHeight ? frameRect.height / frameHeight : 1;
+      const rect = section ? section.getBoundingClientRect() : frameRect;
+      const box = dialog.getBoundingClientRect();
+      const leftEdge = Math.max(frameRect.left, rect.left);
+      const rightEdge = Math.min(frameRect.right, rect.right);
+      const topEdge = Math.max(frameRect.top, rect.top);
+      const bottomEdge = Math.min(frameRect.bottom, rect.bottom);
+      const targetLeft = rightEdge > leftEdge ? (leftEdge + rightEdge) / 2 : (frameRect.left + frameRect.right) / 2;
+      const targetTop = bottomEdge > topEdge ? (topEdge + bottomEdge) / 2 : (frameRect.top + frameRect.bottom) / 2;
+      const left = (targetLeft - frameRect.left) / scaleX;
+      const top = (targetTop - frameRect.top) / scaleY;
+      const halfWidth = Math.min(box.width / scaleX / 2, frameWidth / 2);
+      const halfHeight = Math.min(box.height / scaleY / 2, frameHeight / 2);
+      const insetX = Math.min(12, Math.max(0, frameWidth / 2 - halfWidth));
+      const insetY = Math.min(12, Math.max(0, frameHeight / 2 - halfHeight));
+      const minLeft = halfWidth + insetX;
+      const minTop = halfHeight + insetY;
+      const next = {
+        left: Math.round(Math.max(minLeft, Math.min(frameWidth - halfWidth - insetX, left))),
+        top: Math.round(Math.max(minTop, Math.min(frameHeight - halfHeight - insetY, top))),
+      };
+      setDialogPosition((current) => current && current.left === next.left && current.top === next.top ? current : next);
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    let observer;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(updatePosition);
+      observer.observe(frame);
+      if (section) observer.observe(section);
+      observer.observe(dialog);
+    }
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+      observer?.disconnect();
+    };
+  }, [portalTarget, c.preview, open, n.id, device, dialogProps.style]);
+  useEffect(() => {
+    if (!c.preview || !open) return undefined;
+    if (p.popupCloseOnEscape === false) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [c.preview, open, p.popupCloseOnEscape]);
+  useEffect(() => {
+    if (!open || p.popupCloseOnBackdrop === false) return undefined;
+    const frame = portalTarget;
+    const onPointerDown = (event) => {
+      const target = event.target;
+      const dialog = dialogRef.current;
+      if (!(target instanceof Node) || dialog?.contains(target)) return;
+      const clickedFrame = target instanceof Element ? target.closest(".rp-frame") : null;
+      if (!c.preview && clickedFrame && clickedFrame !== frame) return;
+      if (!c.preview && !clickedFrame && c.activeDevice !== device) return;
+      if (!c.preview) savePopupDismissal(dismissalKey);
+      setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [c.activeDevice, c.preview, device, dismissalKey, open, p.popupCloseOnBackdrop, portalTarget]);
+  useEffect(() => {
+    if (c.preview && open) closeRef.current?.focus();
+  }, [c.preview, open]);
+
+  const closeButton = (
+    <button
+      ref={closeRef}
+      type="button"
+      className="rp-popup-close"
+      aria-label="Close popup"
+      onClick={(event) => {
+        event.stopPropagation();
+        if (!c.preview) savePopupDismissal(dismissalKey);
+        setOpen(false);
+      }}
+    >
+      ×
+    </button>
+  );
+  const dialog = React.createElement(
+    p.tag || "div",
+    {
+      ...dialogProps,
+      ref: (element) => {
+        dialogRef.current = element;
+        if (typeof dialogProps.ref === "function") dialogProps.ref(element);
+        else if (dialogProps.ref) dialogProps.ref.current = element;
+      },
+      style: {
+        ...dialogProps.style,
+        ...(dialogPosition ? {
+          position: "absolute", left: `${dialogPosition.left}px`, top: `${dialogPosition.top}px`,
+          transform: "translate(-50%, -50%)",
+        } : {}),
+      },
+      className: [dialogProps.className, "rp-popup-dialog"].filter(Boolean).join(" "),
+      role: p.role || "dialog",
+      "aria-label": p.ariaLabel || "Popup dialog",
+      "aria-modal": c.preview ? "true" : undefined,
+    },
+    closeButton,
+    children
+  );
+  const overlay = (
+    <div
+      className="rp-popup-overlay"
+      style={{
+        position: "absolute", inset: 0, zIndex: 9999, display: open ? "flex" : "none",
+        alignItems: "center", justifyContent: "center",
+        padding: device === "mobile" ? "12px" : device === "tablet" ? "20px" : "24px",
+        background: popupOverlayColorOf(p.popupOverlayColor),
+      }}
+      aria-hidden={!open}
+    >
+      {dialog}
+    </div>
+  );
+  return (
+    <>
+      <span ref={anchorRef} aria-hidden="true" style={{ display: "none" }} />
+      {portalTarget ? createPortal(overlay, portalTarget, `${n.id}-${device}`) : null}
+    </>
+  );
+}
+
 /* ------------------------------ renderer --------------------------- */
 function Render({ n, device, isPageSection = false }) {
   const c = useContext(Ctx);
   const [hov, setHov] = useState(false);
+  const [customHtmlHeight, setCustomHtmlHeight] = useState(120);
   const p = n.props;
   const hashMark = n.type === "container" ? hashMarkValue(p.urlHashMark) : "";
   const hashRef = useRef(null);
+  const customHtmlFrameRef = useRef(null);
   const isInlineEditing = !c.preview
     && c.inlineEdit?.id === n.id
     && c.inlineEdit.type !== "image"
@@ -1180,6 +1712,16 @@ function Render({ n, device, isPageSection = false }) {
     observer.observe(element);
     return () => observer.disconnect();
   }, [c.preview, p.autoUrlHashMark, hashMark]);
+  useEffect(() => {
+    if (n.type !== "customCode") return undefined;
+    const onMessage = (event) => {
+      if (event.source !== customHtmlFrameRef.current?.contentWindow || event.data?.type !== "replio-custom-html-height") return;
+      const height = Number(event.data.height);
+      if (Number.isFinite(height)) setCustomHtmlHeight(Math.max(120, Math.min(4000, Math.ceil(height))));
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [n.id, n.type]);
   if (n.hide[device]) return null;
 
   const isSel = !c.preview && c.selectedId === n.id && c.activeDevice === device;
@@ -1208,6 +1750,7 @@ function Render({ n, device, isPageSection = false }) {
     if (st.overflow == null) st.overflow = "hidden";
     if (st.height == null && st.aspectRatio == null) st.aspectRatio = "16 / 9";
   }
+  if (n.type === "video" && st.display == null) st.display = "block";
   if (isPageSection && !c.preview && st.position == null) st.position = "relative";
   if (!c.preview) {
     if (isSel) { st.outline = "2px solid #2563eb"; st.outlineOffset = "-2px"; }
@@ -1346,6 +1889,55 @@ function Render({ n, device, isPageSection = false }) {
   ) : null;
 
   switch (n.type) {
+    case "countdown": return <CountdownView n={n} common={common} />;
+    case "customCode": {
+      const html = typeof p.html === "string" ? p.html : "";
+      if (!html.trim()) {
+        return <div {...common} style={{
+          ...st, display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+          color: "#64748b", textAlign: "center", padding: "16px", boxSizing: "border-box",
+        }}>
+          <Code size={18} aria-hidden="true" />
+          <span>Add HTML in the Config panel.</span>
+        </div>;
+      }
+      const heightIsExplicit = st.height && !["auto", "fit-content"].includes(st.height);
+      return (
+        <div {...common} style={{ ...st, height: heightIsExplicit ? st.height : `${customHtmlHeight}px`, overflow: "hidden" }}>
+          <iframe ref={customHtmlFrameRef} srcDoc={customCodePreviewDocument(html)} title={p.title || "Custom HTML preview"} sandbox="allow-scripts"
+            onLoad={(e) => e.currentTarget.contentWindow?.postMessage({ type: "replio-custom-html-measure" }, "*")}
+            style={{
+              display: "block", width: "100%", height: "100%", minHeight: 0, border: 0,
+              pointerEvents: c.preview ? "auto" : "none",
+            }} />
+        </div>
+      );
+    }
+    case "video": {
+      const sourceType = p.sourceType || "file";
+      const embedSrc = ["youtube", "vimeo", "tiktok"].includes(sourceType) ? videoEmbedUrl(sourceType, p.src) : "";
+      const src = ["file", "url"].includes(sourceType) ? safeVideoSource(p.src) : "";
+      if (embedSrc) {
+        return <iframe {...common} src={embedSrc} title={p.title || "Video Player"} loading="lazy"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen />;
+      }
+      if (src) {
+        return <video {...common} src={src} poster={safeUrl(p.poster) || undefined}
+          controls={p.controls !== false} autoPlay={!!p.autoplay} loop={!!p.loop} muted={!!p.muted} playsInline />;
+      }
+      const providerName = { youtube: "YouTube", vimeo: "Vimeo", tiktok: "TikTok" }[sourceType];
+      const message = providerName
+        ? `Enter a valid ${providerName} video URL in Video Source settings.`
+        : "Upload a video or add its URL in Video Source settings.";
+      return <div {...common} style={{
+        ...st, display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+        color: "#ffffff", textAlign: "center", padding: "16px", boxSizing: "border-box",
+      }}>
+        <Ico n="play" size={18} />
+        <span>{message}</span>
+      </div>;
+    }
     case "image": {
       const zoomScale = p.zoom != null ? imageZoomScaleOf(p.zoom) : 1;
       if (zoomScale === 1) return <img {...common} src={p.src} alt={p.alt || ""} />;
@@ -1407,14 +1999,16 @@ function Render({ n, device, isPageSection = false }) {
           c.drop(e, n.id);
         },
       };
-      return React.createElement(
-        p.tag || "div",
-        { ...common, ...dropProps },
+      const dialogProps = { ...common, ...dropProps };
+      const children = [
         p.text || null,
         n.children.map((ch) => <Render key={ch.id} n={ch} device={device} />),
         empty && !c.preview ? <span key="hint" style={{ color: "#94a3b8", fontSize: 12, pointerEvents: "none" }}>Drop components here</span> : null,
-        sectionHandle
-      );
+        sectionHandle,
+      ];
+      return p.isPopup
+        ? <PopupView n={n} device={device} dialogProps={dialogProps}>{children}</PopupView>
+        : React.createElement(p.tag || "div", dialogProps, ...children);
     }
   }
 }
@@ -1433,6 +2027,48 @@ const Section = ({ title, children, open, onToggle, onAdd }) => {
     </div>
   );
 };
+function HtmlCodeEditor({ value, onChange, onSave, onClose }) {
+  const lineNumbersRef = useRef(null);
+  const lineNumbers = Array.from({ length: Math.max(1, value.split("\n").length) }, (_, index) => index + 1);
+  return createPortal(
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" onClick={onClose}
+      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="html-editor-title"
+        className="flex w-full max-w-[900px] flex-col overflow-hidden rounded-lg bg-white shadow-2xl"
+        style={{ height: "min(72vh, 640px)" }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+          <h2 id="html-editor-title" className="text-sm font-semibold text-gray-900">HTML Editor</h2>
+          <button type="button" onClick={onClose} aria-label="Close HTML editor" className="text-gray-500 hover:text-gray-900">
+            <Ico n="close" size={17} />
+          </button>
+        </div>
+        <div className="flex min-h-0 flex-1 border-b border-gray-100 font-mono text-xs leading-[21px]">
+          <div ref={lineNumbersRef} aria-hidden="true" className="w-12 shrink-0 overflow-hidden bg-gray-50 px-3 pt-2 text-right text-gray-400">
+            <pre className="m-0">{lineNumbers.join("\n")}</pre>
+          </div>
+          <textarea aria-label="HTML source code" spellCheck={false} autoCapitalize="off" autoCorrect="off" wrap="off"
+            value={value} onChange={(e) => onChange(e.target.value)}
+            onScroll={(e) => { if (lineNumbersRef.current) lineNumbersRef.current.scrollTop = e.currentTarget.scrollTop; }}
+            onKeyDown={(e) => {
+              if (e.key !== "Tab") return;
+              e.preventDefault();
+              const input = e.currentTarget;
+              const start = input.selectionStart;
+              const end = input.selectionEnd;
+              onChange(value.slice(0, start) + "  " + value.slice(end));
+              requestAnimationFrame(() => { input.selectionStart = input.selectionEnd = start + 2; });
+            }}
+            className="min-w-0 flex-1 resize-none overflow-auto border-0 px-3 pt-2 text-gray-800 outline-none"
+            style={{ lineHeight: "21px", tabSize: 2 }} />
+        </div>
+        <div className="flex justify-end px-5 py-3">
+          <button type="button" onClick={onSave} className="rounded-md bg-black px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800">Save Code</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 const Seg = ({ value, options, onChange }) => (
   <div className="flex rounded-md bg-gray-100 p-0.5 text-xs">
     {options.map((o) => {
@@ -1450,6 +2086,27 @@ const Field = ({ label, children }) => (
     <div className="min-w-0 flex-1">{children}</div>
   </div>
 );
+function CountdownDurationField({ label, value, onChange }) {
+  const current = Math.max(0, parseInt(value, 10) || 0);
+  const setValue = (raw) => {
+    const parsed = parseInt(raw, 10);
+    onChange(Number.isFinite(parsed) ? Math.max(0, Math.min(99999, parsed)) : 0);
+  };
+  return (
+    <Field label={label}>
+      <div className="flex min-w-0 items-center gap-1">
+        <input type="number" min="0" max="99999" step="1" value={current} onChange={(e) => setValue(e.target.value)}
+          aria-label={label} className="min-w-0 flex-1 rounded-md border border-gray-200 px-1.5 py-1 text-center text-xs outline-none focus:border-blue-500" />
+        <button type="button" title={`Reset ${label.toLowerCase()}`} aria-label={`Reset ${label.toLowerCase()}`} onClick={() => onChange(0)}
+          className="rounded border border-gray-200 px-1.5 py-1 text-[10px] text-gray-600 hover:bg-gray-50">Reset</button>
+        <button type="button" title={`Decrease ${label.toLowerCase()}`} aria-label={`Decrease ${label.toLowerCase()}`} onClick={() => setValue(current - 1)}
+          className="rounded border border-gray-200 px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-50">−</button>
+        <button type="button" title={`Increase ${label.toLowerCase()}`} aria-label={`Increase ${label.toLowerCase()}`} onClick={() => setValue(current + 1)}
+          className="rounded border border-gray-200 px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-50">+</button>
+      </div>
+    </Field>
+  );
+}
 const Inp = ({ value, onChange, placeholder, type = "text", autoFocus = false }) => (
   <input type={type} value={value ?? ""} placeholder={placeholder} autoFocus={autoFocus} onChange={(e) => onChange(e.target.value)}
     className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500" />
@@ -1736,6 +2393,10 @@ const Color = ({ value, onChange, placeholder = "none" }) => {
     </div>
   );
 };
+const popupOverlayColorOf = (value) => {
+  const parsed = parseCssColor(value) || { r: 86, g: 96, b: 114, a: 0.58 };
+  return `rgba(${parsed.r}, ${parsed.g}, ${parsed.b}, ${parsed.a})`;
+};
 const DEFAULT_LINEAR_GRADIENT = "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)";
 const splitGradientStops = (value) => {
   const stops = [];
@@ -1848,9 +2509,9 @@ function CustomCss({ value, onApply }) {
 }
 
 /* --------------------------- layers panel -------------------------- */
-function LayerItem({ n, depth, api, selectedId }) {
+function LayerItem({ n, depth, api, selectedId, renamingLayerId, setRenamingLayerId }) {
   const [open, setOpen] = useState(true);
-  const [edit, setEdit] = useState(false);
+  const edit = renamingLayerId === n.id;
   const sel = selectedId === n.id;
   const dropTarget = api.layerDropTarget?.id === n.id ? api.layerDropTarget : null;
   const dropMode = (e) => {
@@ -1863,6 +2524,12 @@ function LayerItem({ n, depth, api, selectedId }) {
   return (
     <div>
       <div data-layer-id={n.id} draggable={!edit}
+        onContextMenu={(e) => {
+          if (edit) return;
+          e.preventDefault();
+          e.stopPropagation();
+          api.showLayerMenu(n.id, e.clientX, e.clientY);
+        }}
         onDragStart={(e) => {
           e.stopPropagation();
           e.dataTransfer.setData("text/x-move", n.id);
@@ -1881,10 +2548,10 @@ function LayerItem({ n, depth, api, selectedId }) {
         <button onClick={(e) => { e.stopPropagation(); setOpen(!open); }} className={`flex w-4 items-center justify-center text-gray-400 ${n.children.length ? "" : "invisible"}`}><Ico n={open ? "down" : "right"} size={13} /></button>
         <span className="flex w-4 justify-center text-gray-400"><Ico n={glyph} size={14} /></span>
         {edit ? (
-          <input autoFocus defaultValue={n.name} onClick={(e) => e.stopPropagation()} onBlur={(e) => { api.rename(n.id, e.target.value || n.name); setEdit(false); }}
+          <input autoFocus defaultValue={n.name} onClick={(e) => e.stopPropagation()} onBlur={(e) => { api.rename(n.id, e.target.value || n.name); setRenamingLayerId(null); }}
             onKeyDown={(e) => e.key === "Enter" && e.target.blur()} className="min-w-0 flex-1 rounded border border-blue-400 px-1 text-xs outline-none" />
         ) : (
-          <span onDoubleClick={() => setEdit(true)} className={`min-w-0 flex-1 truncate ${n.hide[api.device] ? "opacity-40 line-through" : ""}`}>{n.name}</span>
+          <span onDoubleClick={() => setRenamingLayerId(n.id)} className={`min-w-0 flex-1 truncate ${n.hide[api.device] ? "opacity-40 line-through" : ""}`}>{n.name}</span>
         )}
         <span className={`flex items-center ${sel ? "" : "invisible group-hover:visible"}`}>
           <button title="Hide on this device" onClick={(e) => { e.stopPropagation(); api.toggleHide(n.id); }} className="p-0.5 text-gray-500 hover:text-gray-900"><Ico n="eye" size={13} /></button>
@@ -1894,7 +2561,8 @@ function LayerItem({ n, depth, api, selectedId }) {
           <button title="Delete" onClick={(e) => { e.stopPropagation(); api.remove(n.id); }} className="p-0.5 text-red-400 hover:text-red-600"><Ico n="trash" size={13} /></button>
         </span>
       </div>
-      {open && n.children.map((ch) => <LayerItem key={ch.id} n={ch} depth={depth + 1} api={api} selectedId={selectedId} />)}
+      {open && n.children.map((ch) => <LayerItem key={ch.id} n={ch} depth={depth + 1} api={api} selectedId={selectedId}
+        renamingLayerId={renamingLayerId} setRenamingLayerId={setRenamingLayerId} />)}
     </div>
   );
 }
@@ -2118,7 +2786,7 @@ function SectionsPanel({ onAdd, onPreviewVisibilityChange }) {
 }
 function ComponentsPanel() {
   const [q, setQ] = useState("");
-  const list = COMPONENTS.filter((c) => c.label.toLowerCase().includes(q.toLowerCase()));
+  const list = COMPONENTS.filter((c) => `${c.label} ${c.searchTerms || ""}`.toLowerCase().includes(q.toLowerCase()));
   return (
     <>
       <SearchBox value={q} onChange={setQ} placeholder="Search components…" />
@@ -2140,7 +2808,7 @@ function ComponentsPanel() {
     </>
   );
 }
-function AssetsPanel({ assets, setAssets, onUse }) {
+function AssetsPanel({ assets, setAssets, onUse, emptyMessage }) {
   const [q, setQ] = useState("");
   const [url, setUrl] = useState("");
   const fileRef = useRef(null);
@@ -2176,9 +2844,31 @@ function AssetsPanel({ assets, setAssets, onUse }) {
             <span className="block truncate px-1.5 py-1 text-[11px] text-gray-600">{a.name}</span>
           </button>
         ))}
-        {!list.length && <p className="col-span-2 p-2 text-xs text-gray-500">Upload images or paste a URL. Click an image to add it, or to replace the selected image.</p>}
+        {!list.length && <p className="col-span-2 p-2 text-xs text-gray-500">{emptyMessage || "Upload images or paste a URL. Click an image to add it, or to replace the selected image."}</p>}
       </div>
     </>
+  );
+}
+function BackgroundImagePicker({ assets, setAssets, onUse, onClose }) {
+  return createPortal(
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-labelledby="background-image-picker-title"
+        className="flex w-full max-w-[640px] flex-col overflow-hidden rounded-lg bg-white shadow-2xl"
+        style={{ height: "min(72vh, 620px)" }}
+        onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+          <h2 id="background-image-picker-title" className="text-sm font-semibold text-gray-900">Select Background Image</h2>
+          <button type="button" onClick={onClose} aria-label="Close image picker" className="text-gray-500 hover:text-gray-900">
+            <Ico n="close" size={16} />
+          </button>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col p-4">
+          <AssetsPanel assets={assets} setAssets={setAssets} onUse={onUse}
+            emptyMessage="Upload an image or paste a URL, then select it to use as the background." />
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -2278,13 +2968,18 @@ function SliderConfig({ p, api }) {
   );
 }
 
-function RightPanel({ node: n, device, stateTab, setStateTab, activeNodeState, setActiveNodeState, tab, setTab, api }) {
+function RightPanel({ node: n, device, stateTab, setStateTab, activeNodeState, setActiveNodeState, tab, setTab, api, assets, setAssets }) {
   const fileRef = useRef(null);
   const imageFileRef = useRef(null);
+  const videoFileRef = useRef(null);
   const backgroundFileRef = useRef(null);
   const [backgroundModes, setBackgroundModes] = useState({});
+  const [backgroundPickerOpen, setBackgroundPickerOpen] = useState(false);
   const [addingState, setAddingState] = useState(false);
   const [newStateName, setNewStateName] = useState("");
+  const [videoUploadError, setVideoUploadError] = useState("");
+  const [htmlEditorOpen, setHtmlEditorOpen] = useState(false);
+  const [htmlDraft, setHtmlDraft] = useState("");
   const [interactionOpen, setInteractionOpen] = useState({ click: false, hover: false, animation: false });
   const [borderSide, setBorderSide] = useState("all");
   /* Sections keep independent open states and reset when a different node is selected. */
@@ -2294,6 +2989,10 @@ function RightPanel({ node: n, device, stateTab, setStateTab, activeNodeState, s
     ...(n.type === "faq" ? ["faq-content"] : []),
     ...(n.type === "container" ? ["layout"] : []),
     ...(n.type === "image" ? ["image", "border"] : []),
+    ...(n.type === "video" ? ["video-source"] : []),
+    ...(n.type === "customCode" ? ["html-source"] : []),
+    ...(n.type === "countdown" ? ["countdown-type", "countdown-time"] : []),
+    ...(n.props.isPopup ? ["popup-settings"] : []),
     ...(n.type === "text" || n.type === "heading" || n.type === "button" || n.type === "icon" || n.type === "list" || n.type === "stars" || n.type === "circle" ? ["typography"] : []),
   ]);
   const isOpen = (id) => openSections.includes(id);
@@ -2306,6 +3005,8 @@ function RightPanel({ node: n, device, stateTab, setStateTab, activeNodeState, s
   const isTxt = ["text", "heading", "button", "list", "icon", "stars", "circle"].includes(n.type);
   const isTextContent = ["text", "heading", "button", "icon"].includes(n.type);
   const p = n.props;
+  const videoSourceType = ["file", "url", "youtube", "vimeo", "tiktok"].includes(p.sourceType) ? p.sourceType : "file";
+  const countdownMode = p.mode === "afterLoad" ? "afterLoad" : "specific";
   const backgroundImage = String(cur.backgroundImage || "").trim();
   const inferredBackgroundMode = /^linear-gradient\(/i.test(backgroundImage)
     ? "gradient"
@@ -2319,6 +3020,24 @@ function RightPanel({ node: n, device, stateTab, setStateTab, activeNodeState, s
   };
   const setBackgroundImageUrl = (url) => {
     api.setStyles(url ? { backgroundImage: `url("${url}")`, backgroundSize: "cover", backgroundPosition: "center" } : { backgroundImage: "" }, editKey);
+  };
+  const useBackgroundAsset = (asset) => {
+    setBackgroundImageUrl(asset.src);
+    setBackgroundModes((modes) => ({ ...modes, [n.id]: "image" }));
+    setBackgroundPickerOpen(false);
+  };
+  const uploadVideoFile = (file) => {
+    setVideoUploadError("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        setVideoUploadError("The selected video could not be read.");
+        return;
+      }
+      api.setProps({ sourceType: "file", src: reader.result });
+    };
+    reader.onerror = () => setVideoUploadError("The selected video could not be read.");
+    reader.readAsDataURL(file);
   };
 
   const wMode = cur.width === "100%" ? "fill" : !cur.width || cur.width === "fit-content" ? "fit" : "fixed";
@@ -2448,6 +3167,48 @@ function RightPanel({ node: n, device, stateTab, setStateTab, activeNodeState, s
               <Section title="FAQ Content" open={isOpen("faq-content")} onToggle={() => toggleSection("faq-content")}>
                 <Field label="Question"><Inp value={p.question} onChange={(v) => api.setProps({ question: v })} /></Field>
                 <div><span className="mb-1 block text-xs text-gray-500">Answer</span><Area rows={5} value={p.answer} onChange={(v) => api.setProps({ answer: v })} /></div>
+              </Section>
+            )}
+
+            {n.type === "video" && (
+              <Section title="Video Source" open={isOpen("video-source")} onToggle={() => toggleSection("video-source")}>
+                <Field label="Source type">
+                  <select value={videoSourceType}
+                    onChange={(e) => { setVideoUploadError(""); api.setProps({ sourceType: e.target.value }); }}
+                    className="w-full rounded-md border border-gray-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-blue-500">
+                    <option value="file">Video File</option>
+                    <option value="url">Video URL</option>
+                    <option value="youtube">YouTube</option>
+                    <option value="vimeo">Vimeo</option>
+                    <option value="tiktok">TikTok</option>
+                  </select>
+                </Field>
+                <Field label="Video URL">
+                  <Inp value={typeof p.src === "string" && p.src.startsWith("data:video/") ? "(uploaded video file)" : p.src || ""}
+                    onChange={(v) => { if (v !== "(uploaded video file)") api.setProps({ src: v }); }}
+                    placeholder={videoSourceType === "youtube" ? "https://youtube.com/watch?v=…" : videoSourceType === "vimeo" ? "https://vimeo.com/…" : videoSourceType === "tiktok" ? "https://www.tiktok.com/@…/video/…" : "https://…/video.mp4"} />
+                </Field>
+                {videoSourceType === "file" && (
+                  <>
+                    <button type="button" onClick={() => videoFileRef.current?.click()} className="w-full rounded-md border border-gray-200 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Upload video</button>
+                    <p className="text-[11px] text-gray-500">Uploaded videos are stored with this page. Use a hosted URL for large files that may exceed browser storage.</p>
+                    <input ref={videoFileRef} type="file" accept="video/*" hidden onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) uploadVideoFile(file);
+                      e.target.value = "";
+                    }} />
+                  </>
+                )}
+                {videoUploadError && <p role="alert" className="text-[11px] text-red-600">{videoUploadError}</p>}
+                {["file", "url"].includes(videoSourceType) && (
+                  <>
+                    <Field label="Poster image URL"><Inp value={p.poster || ""} onChange={(v) => api.setProps({ poster: v })} placeholder="Optional preview image" /></Field>
+                    <Toggle label="Show controls" checked={p.controls !== false} onChange={(v) => api.setProps({ controls: v })} />
+                    <Toggle label="Autoplay" checked={!!p.autoplay} onChange={(v) => api.setProps({ autoplay: v })} />
+                    <Toggle label="Muted" checked={!!p.muted} onChange={(v) => api.setProps({ muted: v })} />
+                    <Toggle label="Loop" checked={!!p.loop} onChange={(v) => api.setProps({ loop: v })} />
+                  </>
+                )}
               </Section>
             )}
 
@@ -2658,7 +3419,8 @@ function RightPanel({ node: n, device, stateTab, setStateTab, activeNodeState, s
                   <Field label="Image URL">
                     <Inp value={backgroundImage.replace(/^url\(["']?|["']?\)$/g, "")} onChange={setBackgroundImageUrl} placeholder="https://…" />
                   </Field>
-                  <button type="button" onClick={() => backgroundFileRef.current?.click()} className="w-full rounded-md border border-gray-200 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Choose background image</button>
+                  <button type="button" title="Select from media library" onClick={() => setBackgroundPickerOpen(true)} className="w-full rounded-md border border-gray-200 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Select Background Image</button>
+                  <button type="button" onClick={() => backgroundFileRef.current?.click()} className="w-full rounded-md border border-gray-200 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Upload background image</button>
                   <input ref={backgroundFileRef} type="file" accept="image/*" hidden onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
@@ -2717,6 +3479,67 @@ function RightPanel({ node: n, device, stateTab, setStateTab, activeNodeState, s
             {renderParentStates("config-parent")}
             {renderComponentStates("config-states")}
             <Field label="Name"><Inp value={n.name} onChange={(v) => api.rename(n.id, v)} /></Field>
+            {n.type === "countdown" && (
+              <>
+                <Section title="Countdown Type" open={isOpen("countdown-type")} onToggle={() => toggleSection("countdown-type")}>
+                  <Field label="Countdown Type">
+                    <select value={countdownMode} onChange={(e) => api.setProps({ mode: e.target.value })}
+                      className="w-full rounded-md border border-gray-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-blue-500">
+                      <option value="specific">Specific Time</option>
+                      <option value="afterLoad">Time After Load</option>
+                    </select>
+                  </Field>
+                  {countdownMode === "specific" ? (
+                    <Field label="Target date and time">
+                      <input type="datetime-local" step="1" value={p.targetAt || ""}
+                        onChange={(e) => api.setProps({ targetAt: e.target.value })}
+                        className="w-full min-w-0 rounded-md border border-gray-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-blue-500" />
+                    </Field>
+                  ) : null}
+                </Section>
+                {countdownMode === "afterLoad" && (
+                  <Section title="Countdown Time" open={isOpen("countdown-time")} onToggle={() => toggleSection("countdown-time")}>
+                    {[["seconds", "Seconds"], ["minutes", "Minutes"], ["hours", "Hours"], ["days", "Days"]].map(([unit, label]) => (
+                      <CountdownDurationField key={unit} label={label} value={p[unit]} onChange={(value) => api.setProps({ [unit]: value })} />
+                    ))}
+                    <p className="text-[11px] leading-relaxed text-gray-500">The countdown stops at zero.</p>
+                  </Section>
+                )}
+              </>
+            )}
+            {n.type === "customCode" && (
+              <Section title="HTML Source Code" open={isOpen("html-source")} onToggle={() => toggleSection("html-source")}>
+                <p className="text-[11px] leading-relaxed text-gray-500">
+                  Specify the HTML source code to embed in this component. Only use code you trust; untrusted code can affect your site’s security.
+                </p>
+                <button type="button" onClick={() => {
+                  setHtmlDraft(typeof p.html === "string" ? p.html : "");
+                  setHtmlEditorOpen(true);
+                }} className="w-full rounded-md border border-gray-200 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
+                  Launch Code Editor
+                </button>
+              </Section>
+            )}
+            {n.type === "container" && p.isPopup && (
+              <Section title="Popup Settings" open={isOpen("popup-settings")} onToggle={() => toggleSection("popup-settings")}>
+                <Field label="Show after (seconds)">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={p.popupDelay ?? 0}
+                    onChange={(e) => api.setProps({ popupDelay: Math.max(0, Number(e.target.value) || 0) })}
+                    className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500"
+                  />
+                </Field>
+                <Toggle label="Click Outside To Close" checked={p.popupCloseOnBackdrop !== false} onChange={(value) => api.setProps({ popupCloseOnBackdrop: value })} />
+                <Field label="Overlay Color">
+                  <Color value={p.popupOverlayColor || "rgba(86, 96, 114, 0.58)"} onChange={(value) => api.setProps({ popupOverlayColor: value })} />
+                </Field>
+                <p className="text-[11px] leading-relaxed text-gray-500">Set the color and opacity of the popup background overlay.</p>
+                <Toggle label="Close with Escape key" checked={p.popupCloseOnEscape !== false} onChange={(value) => api.setProps({ popupCloseOnEscape: value })} />
+              </Section>
+            )}
             {n.type === "container" && <Field label="HTML tag"><Sel value={p.tag || "div"} options={["div", "section", "header", "footer", "main", "nav", "article", "aside"]} onChange={(v) => api.setProps({ tag: v })} /></Field>}
             {n.type === "container" && (
               <>
@@ -2825,6 +3648,10 @@ function RightPanel({ node: n, device, stateTab, setStateTab, activeNodeState, s
           <button onClick={() => api.remove(n.id)} className="flex-1 rounded-md border border-red-200 py-1.5 text-xs text-red-600 hover:bg-red-50">Delete</button>
         </div>}
       </div>
+      {htmlEditorOpen && <HtmlCodeEditor value={htmlDraft} onChange={setHtmlDraft} onClose={() => setHtmlEditorOpen(false)}
+        onSave={() => { api.setProps({ html: htmlDraft }); setHtmlEditorOpen(false); }} />}
+      {backgroundPickerOpen && <BackgroundImagePicker assets={assets} setAssets={setAssets} onUse={useBackgroundAsset}
+        onClose={() => setBackgroundPickerOpen(false)} />}
     </div>
   );
 }
@@ -2892,6 +3719,9 @@ export default function Editor() {
   const page = hist.present;
 
   const [selId, setSelId] = useState(null);
+  const [nodeClipboard, setNodeClipboard] = useState(null);
+  const [layerMenu, setLayerMenu] = useState(null);
+  const [renamingLayerId, setRenamingLayerId] = useState(null);
   const [activeDevice, setActiveDevice] = useState("desktop");
   const [stateTab, setStateTab] = useState("default");
   const [activeNodeState, setActiveNodeState] = useState("default");
@@ -3130,13 +3960,14 @@ export default function Editor() {
   const pageStyleFor = (d) => ({ boxSizing: "border-box", background: "#ffffff", ...resolveStyle(pageNode, d, false) });
   const selNode = selId === PAGE_ID ? pageNode : selId ? findNode(page.children, selId) : null;
   useEffect(() => { if (selId && !selNode) setSelId(null); });
+  useEffect(() => { if (selNode?.type === "customCode") setPanelTab("config"); }, [selNode?.id, selNode?.type]);
   const select = (id, d) => {
     setSelId(id);
     setDimPop(null);
     if (d) setActiveDevice(d);
     setStateTab("default");
     setActiveNodeState("default");
-    setPanelTab("design");
+    setPanelTab(findNode(page.children, id)?.type === "customCode" ? "config" : "design");
   };
   const editNode = (n, d, element) => {
     const bounds = element.getBoundingClientRect();
@@ -3211,6 +4042,28 @@ export default function Editor() {
     rename: (id, name) => patchId(id, (n) => ({ ...n, name }), "rename"),
     toggleHide: (id, d) => patchId(id, (n) => ({ ...n, hide: { ...n.hide, [d || activeDevice]: !n.hide[d || activeDevice] } })),
     remove: (id) => { update((p) => ({ ...p, children: removeNode(p.children, id) })); },
+    copy: (id) => {
+      const source = findNode(page.children, id);
+      if (source) setNodeClipboard(clone(source));
+    },
+    paste: (targetId) => {
+      if (!nodeClipboard) return;
+      const copy = reId(nodeClipboard);
+      const target = targetId ? findNode(page.children, targetId) : null;
+      const parentId = target ? findParentId(page.children, targetId) : null;
+      const siblings = parentId == null ? page.children : findNode(page.children, parentId)?.children || [];
+      const targetIndex = target ? siblings.findIndex((node) => node.id === target.id) : siblings.length - 1;
+      update((p) => ({ ...p, children: insertInto(p.children, parentId ?? null, copy, targetIndex + 1) }));
+      setSelId(copy.id);
+    },
+    showLayerMenu: (id, clientX, clientY) => {
+      select(id);
+      setLayerMenu({
+        id,
+        x: Math.max(8, Math.min(clientX, window.innerWidth - 184 - 8)),
+        y: Math.max(8, Math.min(clientY, window.innerHeight - 184 - 8)),
+      });
+    },
     layerDropTarget,
     startMove: (id) => { movingRef.current = id; },
     endMove: () => { movingRef.current = null; setDropLine(null); setLayerDropTarget(null); },
@@ -3492,14 +4345,18 @@ export default function Editor() {
         if (preview) setPreview(null); else setSelId(null);
         setPop(null);
         setDimPop(null);
+        setLayerMenu(null);
         return;
       }
       if (preview) return; // no editing shortcuts while previewing
       const k = e.key.toLowerCase();
       if (mod && k === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); }
       else if (mod && k === "y") { e.preventDefault(); redo(); }
-      else if (mod && k === "d" && selId && selId !== PAGE_ID) { e.preventDefault(); api.dup(selId); }
-      else if ((e.key === "Delete" || e.key === "Backspace") && selId && selId !== PAGE_ID) { e.preventDefault(); api.remove(selId); }
+      else if (mod && k === "c" && selId && selId !== PAGE_ID) { e.preventDefault(); api.copy(selId); setLayerMenu(null); }
+      else if (mod && k === "v" && nodeClipboard) { e.preventDefault(); api.paste(selId && selId !== PAGE_ID ? selId : null); setLayerMenu(null); }
+      else if (mod && k === "d" && selId && selId !== PAGE_ID) { e.preventDefault(); api.dup(selId); setLayerMenu(null); }
+      else if (e.key === "F2" && selId && selId !== PAGE_ID) { e.preventDefault(); setRenamingLayerId(selId); setLayerMenu(null); }
+      else if ((e.key === "Delete" || e.key === "Backspace") && selId && selId !== PAGE_ID) { e.preventDefault(); api.remove(selId); setLayerMenu(null); }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
@@ -3569,7 +4426,7 @@ export default function Editor() {
   return (
     <div
       className="fixed inset-0 overflow-hidden bg-[#fafafa] font-sans text-gray-900"
-      onClick={() => { setPop(null); setDimPop(null); }}
+      onClick={() => { setPop(null); setDimPop(null); setLayerMenu(null); }}
       onPointerDownCapture={(e) => {
         if (inlineEdit && !inlineEditRef.current?.contains(e.target)) saveInlineEdit();
       }}
@@ -3724,7 +4581,8 @@ export default function Editor() {
                   onDrop={(e) => dropLayer(e, PAGE_ID, "inside")}
                   className={`mb-1 flex w-full items-center gap-1 rounded-md px-1 py-1 text-left text-xs font-medium ${layerDropTarget?.id === PAGE_ID ? "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-400" : selId === PAGE_ID ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`}
                 ><Ico n="page" size={14} />Page</button>
-                {page.children.map((n) => <LayerItem key={n.id} n={n} depth={1} api={api} selectedId={selId} />)}
+                {page.children.map((n) => <LayerItem key={n.id} n={n} depth={1} api={api} selectedId={selId}
+                  renamingLayerId={renamingLayerId} setRenamingLayerId={setRenamingLayerId} />)}
                 {!page.children.length && <p className="p-2 text-xs text-gray-500">Nothing here yet.</p>}
               </div>
             )}
@@ -3775,7 +4633,8 @@ export default function Editor() {
       {selNode && !inlineEdit && (
         <div className="pointer-events-none absolute inset-0" onClick={(e) => e.stopPropagation()}>
           <RightPanel key={selNode.id} node={selNode} device={activeDevice} stateTab={stateTab} setStateTab={setStateTab}
-            activeNodeState={activeNodeState} setActiveNodeState={setActiveNodeState} tab={panelTab} setTab={setPanelTab} api={api} />
+            activeNodeState={activeNodeState} setActiveNodeState={setActiveNodeState} tab={panelTab} setTab={setPanelTab}
+            api={api} assets={assets} setAssets={setAssets} />
         </div>
       )}
 
@@ -3831,13 +4690,45 @@ export default function Editor() {
           </div>
           <div className="flex-1 overflow-auto p-6">
             <Ctx.Provider value={{ preview: true }}>
-              <div className="rp-frame mx-auto shadow-lg" style={{ maxWidth: "100%", minHeight: "100%", ...pageStyleFor(preview), width: Math.min(widths[preview], 1600) }}>
+              <div className="rp-frame relative mx-auto shadow-lg" style={{ maxWidth: "100%", minHeight: "100%", ...pageStyleFor(preview), width: Math.min(widths[preview], 1600) }}>
                 <style>{FRAME_CSS}</style>
                 <FontLoader page={page} />
                 {page.children.map((n) => <Render key={n.id} n={n} device={preview} />)}
               </div>
             </Ctx.Provider>
           </div>
+        </div>
+      )}
+
+      {layerMenu && (
+        <div
+          role="menu"
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          className="fixed z-[70] w-[184px] rounded-lg bg-white p-1 shadow-xl ring-1 ring-black/10"
+          style={{ left: layerMenu.x, top: layerMenu.y }}
+        >
+          <button role="menuitem" onClick={() => { api.copy(layerMenu.id); setLayerMenu(null); }}
+            className="flex w-full items-center justify-between rounded px-2.5 py-2 text-left text-xs text-gray-700 hover:bg-gray-100">
+            <span>Copy</span><span className="text-[10px] text-gray-400">Ctrl+C</span>
+          </button>
+          <button role="menuitem" disabled={!nodeClipboard} onClick={() => { api.paste(layerMenu.id); setLayerMenu(null); }}
+            className="flex w-full items-center justify-between rounded px-2.5 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent">
+            <span>Paste</span><span className="text-[10px] text-gray-400">Ctrl+V</span>
+          </button>
+          <div className="my-1 border-t border-gray-100" />
+          <button role="menuitem" onClick={() => { setRenamingLayerId(layerMenu.id); setLayerMenu(null); }}
+            className="flex w-full items-center justify-between rounded px-2.5 py-2 text-left text-xs text-gray-700 hover:bg-gray-100">
+            <span>Rename</span><span className="text-[10px] text-gray-400">F2</span>
+          </button>
+          <button role="menuitem" onClick={() => { api.dup(layerMenu.id); setLayerMenu(null); }}
+            className="flex w-full items-center justify-between rounded px-2.5 py-2 text-left text-xs text-gray-700 hover:bg-gray-100">
+            <span>Duplicate</span><span className="text-[10px] text-gray-400">Ctrl+D</span>
+          </button>
+          <button role="menuitem" onClick={() => { api.remove(layerMenu.id); setLayerMenu(null); }}
+            className="flex w-full items-center justify-between rounded px-2.5 py-2 text-left text-xs text-red-600 hover:bg-red-50">
+            <span>Delete</span><span className="text-[10px] text-red-300">Del</span>
+          </button>
         </div>
       )}
 
