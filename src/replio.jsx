@@ -15,7 +15,6 @@ const cap = (s) => s[0].toUpperCase() + s.slice(1);
 const esc = (s) =>
   String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-/* block javascript:/data:/vbscript: URLs from link actions */
 const safeUrl = (u) => {
   const v = String(u || "").trim();
   if (!v || /^(javascript|data|vbscript):/i.test(v)) return "";
@@ -140,6 +139,333 @@ const COMPONENTS = [
   { key: "col2", label: "2 Columns", glyph: "column", build: () => grid("2 Columns", 2, [1, 2].map(() => Box("Column", [], { padding: "16px", border: "1px dashed #d1d5db" }))) },
   { key: "col3", label: "3 Columns", glyph: "column", build: () => grid("3 Columns", 3, [1, 2, 3].map(() => Box("Column", [], { padding: "16px", border: "1px dashed #d1d5db" }))) },
 ];
+
+/* ======================================================================
+   SHOPIFY / STORE COMPONENTS
+   Paste this block in your editor file RIGHT AFTER the `COMPONENTS = [...]`
+   array (and after the SECTIONS block is fine too). It only uses helpers
+   that already exist in the file (node, T, H, Btn, Box, Row, Img, Stars,
+   grid, ph), so the renderer, export, undo/redo etc. need NO changes.
+   Every item becomes a normal, editable, draggable, countable component.
+   ====================================================================== */
+
+const colCell = () => Box("Column", [], { padding: "16px", border: "1px dashed #d1d5db" });
+const BORDER = "1px solid #d1d5db";
+
+/* small building blocks */
+const optionBtn = (t, active) =>
+  Btn(t, {
+    padding: "10px 18px", fontSize: "14px", borderRadius: "8px",
+    background: active ? "#111827" : "#ffffff", color: active ? "#ffffff" : "#111827", border: BORDER,
+  });
+const optionList = (name, label, opts) =>
+  Box(name, [
+    T(label, { fontWeight: "600", color: "#111827", fontSize: "14px" }),
+    node("container", "Options", { tag: "div" }, { display: "flex", flexDirection: "row", flexWrap: "wrap", gap: "8px" },
+      opts.map((o, i) => optionBtn(o, i === 0))),
+  ], { gap: "8px" });
+const dropdown = (name, label, value) =>
+  Box(name, [
+    T(label, { fontWeight: "600", color: "#111827", fontSize: "14px" }),
+    Row("Select", [T(value, { color: "#111827", fontSize: "14px" }), T("▾", { color: "#6b7280" })],
+      { justifyContent: "space-between", alignItems: "center", padding: "10px 12px", border: BORDER, borderRadius: "8px", background: "#ffffff" },
+      { flexDirection: "row" }),
+  ], { gap: "8px" });
+const swatches = (name, colors) =>
+  Row(name, colors.map((c, i) =>
+    node("circle", "Swatch", {}, { width: "28px", height: "28px", borderRadius: "9999px", background: c, border: i === 0 ? "2px solid #111827" : "1px solid #d1d5db", cursor: "pointer" })),
+  { gap: "10px", alignItems: "center", width: "auto" }, { flexDirection: "row" });
+const qtySelector = () =>
+  Row("Quantity Selector", [
+    T("−", { fontSize: "20px", textAlign: "center", color: "#111827", width: "40px", cursor: "pointer" }),
+    T("1", { fontSize: "16px", textAlign: "center", color: "#111827", width: "40px" }),
+    T("+", { fontSize: "20px", textAlign: "center", color: "#111827", width: "40px", cursor: "pointer" }),
+  ], { width: "fit-content", alignItems: "center", border: BORDER, borderRadius: "8px", padding: "8px 0", gap: "0px" }, { flexDirection: "row" });
+const thumbs = (n = 4) =>
+  Row("Thumbnails", Array.from({ length: n }, (_, i) => Img(ph(160, 160, String(i + 1)), { width: "64px", height: "64px", borderRadius: "8px" })),
+    { gap: "8px" }, { flexDirection: "row" });
+const productTitle = () => H("Product title", 32, {}, {}, "h1");
+const productPrice = () => T("$19.99", { fontSize: "24px", fontWeight: "700", color: "#111827" });
+const compareAt = () => T("$29.99", { fontSize: "24px", fontWeight: "700", color: "#2563eb", textDecoration: "line-through" });
+const productDesc = () => T("Short description of what the product does and who it is for.");
+const addToCart = () => Btn("Add to Cart", { width: "100%", background: "#2563eb" });
+const buyNow = () => Btn("Buy Now", { width: "100%", background: "#2563eb" });
+const ratingLine = (brand, reviews = "1,234") =>
+  Row(brand + " Rating", [Stars(5), T(`4.9 (${reviews})`, { fontSize: "14px" })], { alignItems: "center", gap: "8px", width: "auto" }, { flexDirection: "row" });
+const reviewsWidget = (brand) =>
+  Box(brand + " Reviews", [
+    H("Customer reviews", 28, {}, { fontSize: "24px" }, "h2"),
+    ratingLine(brand, "2,184"),
+    ...[1, 2, 3].map((i) =>
+      Box("Review", [Stars(5), T("“Short, specific quote about a real result.”", { color: "#111827" }), T("Customer " + i, { fontSize: "14px", fontWeight: "600" })],
+        { padding: "16px", border: "1px solid #e5e7eb", borderRadius: "12px", gap: "8px" })),
+    T(`Powered by ${brand}`, { fontSize: "12px", color: "#9ca3af" }),
+  ], { padding: "24px", gap: "16px" });
+const planList = () =>
+  Box("Selling Plans", [
+    ...["One-time purchase", "Subscribe & save 15%", "Subscribe & save 20% (quarterly)"].map((t, i) =>
+      Row("Plan", [node("circle", "Radio", {}, { width: "16px", height: "16px", borderRadius: "9999px", border: "2px solid #111827", background: i === 1 ? "#111827" : "#ffffff", flexShrink: "0" }),
+        T(t, { color: "#111827", fontSize: "14px" })],
+        { alignItems: "center", gap: "10px", padding: "12px", border: BORDER, borderRadius: "8px" }, { flexDirection: "row" })),
+  ], { gap: "8px" });
+const buyBox = (extra = []) =>
+  Box("Buy Box", [
+    productTitle(), ratingLine("Reviews"),
+    Row("Price", [productPrice(), compareAt()], { gap: "12px", alignItems: "center", width: "auto" }, { flexDirection: "row" }),
+    productDesc(), ...extra, qtySelector(), addToCart(), buyNow(),
+  ], { gap: "14px" });
+const bundleBuilder = (name) =>
+  Box(name, [
+    H("Build your bundle", 28, {}, { fontSize: "24px" }, "h2"),
+    grid("Bundle Items", 3, [1, 2, 3].map((i) =>
+      Box("Bundle Item", [Img(ph(400, 400, "Product " + i), { height: "auto", aspectRatio: "1 / 1" }), T("Product " + i, { fontWeight: "600", color: "#111827" }), T("$19.99"), Btn("Add", { padding: "8px 16px", fontSize: "14px" })],
+        { gap: "8px", padding: "12px", border: "1px solid #e5e7eb", borderRadius: "12px" }))),
+    Btn("Add bundle to cart", { width: "100%", background: "#2563eb" }),
+  ], { padding: "24px", gap: "16px" });
+
+/* the component definitions. glyph = key of the ICONS map */
+const SHOPIFY_COMPONENTS = [
+  /* extra layout columns */
+  { key: "col12", label: "1/2 Columns", glyph: "column", build: () => grid("1/2 Columns", 2, [colCell(), colCell()], { gridTemplateColumns: "1fr 2fr" }) },
+  { key: "col21", label: "2/1 Columns", glyph: "column", build: () => grid("2/1 Columns", 2, [colCell(), colCell()], { gridTemplateColumns: "2fr 1fr" }) },
+  { key: "col4", label: "4 Columns", glyph: "column", build: () => grid("4 Columns", 4, [1, 2, 3, 4].map(colCell)) },
+
+  /* product blocks */
+  { key: "buybox", label: "Buy Box", glyph: "container", build: () => buyBox() },
+  { key: "productcollection", label: "Product Collection", glyph: "grid", build: () =>
+      grid("Product Collection", 3, [1, 2, 3].map((i) =>
+        Box("Product Card", [Img(ph(500, 500, "Product " + i), { height: "auto", aspectRatio: "1 / 1" }), T("Product " + i, { fontWeight: "600", color: "#111827" }), T("$19.99")], { gap: "8px" }))) },
+  { key: "buyboxcarousel", label: "Buy Box with Carousel", glyph: "slider", build: () =>
+      Row("Buy Box with Carousel", [
+        Box("Gallery", [buildSlider(), thumbs()], { flex: "1" }),
+        Box("Details", buyBox().children, { flex: "1", justifyContent: "center" }),
+      ], { gap: "32px", padding: "32px" }, { gap: "20px", padding: "16px" }) },
+  { key: "buyboxswatches", label: "Buy Box with Swatches", glyph: "container", build: () =>
+      buyBox([T("Color", { fontWeight: "600", color: "#111827", fontSize: "14px" }), swatches("Swatches", ["#111827", "#2563eb", "#dc2626", "#16a34a"])]) },
+  { key: "buyboxvariants", label: "Buy Box with Variants", glyph: "container", build: () =>
+      buyBox([optionList("Size", "Size", ["S", "M", "L", "XL"])]) },
+  { key: "buynow", label: "Buy Now Button", glyph: "button", build: buyNow },
+  { key: "addtocart", label: "Add To Cart Button", glyph: "button", build: addToCart },
+  { key: "dynamiccheckout", label: "Dynamic Checkout", glyph: "button", build: () =>
+      Btn("Pay", { width: "100%", background: "#5a31f4" }) },
+  { key: "buywithprime", label: "Buy With Prime Button", glyph: "button", build: () =>
+      Btn("Buy with prime", { width: "100%", background: "#1a98ff", color: "#ffffff" }) },
+  { key: "productqtyselector", label: "Product Quantity Selector", glyph: "container", build: qtySelector },
+  { key: "productselection", label: "Product Selection", glyph: "list", build: () =>
+      Box("Product Selection", [dropdown("Product", "Product", "Select a product"), qtySelector()], { gap: "12px" }) },
+  { key: "productimagegrid", label: "Product Image Grid", glyph: "grid", build: () =>
+      grid("Product Image Grid", 2, [1, 2, 3, 4].map((i) => Img(ph(500, 500, "Image " + i), { height: "auto", aspectRatio: "1 / 1" })), { gap: "12px" }) },
+  { key: "productdescription", label: "Product Description", glyph: "text", build: productDesc },
+  { key: "producttitle", label: "Product Title", glyph: "text", build: productTitle },
+  { key: "productquantity", label: "Product Quantity", glyph: "text", build: () => T("Qty 1", { fontWeight: "700", color: "#2563eb", fontSize: "20px" }) },
+  { key: "productvariantimage", label: "Product Variant Image", glyph: "image", build: () => Img(ph(600, 600, "Variant image"), { height: "auto", aspectRatio: "1 / 1" }) },
+  { key: "productprice", label: "Product Price", glyph: "text", build: productPrice },
+  { key: "compareatprice", label: "Compare At Price", glyph: "text", build: compareAt },
+  { key: "quantityselector", label: "Quantity Selector", glyph: "container", build: qtySelector },
+  { key: "circularoptionlist", label: "Circular Option List", glyph: "circle", build: () => swatches("Circular Option List", ["#111827", "#2563eb", "#dc2626", "#16a34a", "#f59e0b"]) },
+  { key: "productimages", label: "Product Images", glyph: "slider", build: () =>
+      Box("Product Images", [Img(ph(800, 800, "Product image"), { height: "auto", aspectRatio: "1 / 1" }), thumbs()], { gap: "12px" }) },
+  { key: "paymentterms", label: "Payment Terms", glyph: "text", build: () =>
+      T("Pay in 4 interest-free installments of $5.00 with Shop Pay", { fontSize: "14px", color: "#4b5563" }) },
+
+  /* variants / options */
+  { key: "variantlist", label: "Variant List", glyph: "list", build: () => optionList("Variant List", "Variant", ["Small", "Medium", "Large"]) },
+  { key: "variantdropdown", label: "Variant Dropdown", glyph: "list", build: () => dropdown("Variant Dropdown", "Variant", "Select a variant") },
+  { key: "variantlistreviews", label: "Variant List with Reviews", glyph: "list", build: () =>
+      Box("Variant List with Reviews", [optionList("Variant List", "Variant", ["Small", "Medium", "Large"]), ratingLine("Reviews")], { gap: "12px" }) },
+  { key: "optionlist", label: "Option List", glyph: "list", build: () => optionList("Option List", "Option", ["Option 1", "Option 2", "Option 3"]) },
+  { key: "optiondropdown", label: "Option Dropdown", glyph: "list", build: () => dropdown("Option Dropdown", "Option", "Select an option") },
+  { key: "optionlistreviews", label: "Option List with Reviews", glyph: "list", build: () =>
+      Box("Option List with Reviews", [optionList("Option List", "Option", ["Option 1", "Option 2", "Option 3"]), ratingLine("Reviews")], { gap: "12px" }) },
+
+  /* selling plans / subscriptions */
+  { key: "sellingplanlist", label: "Selling Plan List", glyph: "list", build: planList },
+  { key: "sellingplandropdown", label: "Selling Plan Dropdown", glyph: "list", build: () => dropdown("Selling Plan Dropdown", "Delivery", "Subscribe & save 15%") },
+  { key: "sellingplanlistprice", label: "Selling Plan List with Price", glyph: "list", build: () =>
+      Box("Selling Plan List with Price", [planList(), Row("Price", [productPrice(), compareAt()], { gap: "12px", alignItems: "center", width: "auto" }, { flexDirection: "row" })], { gap: "12px" }) },
+  { key: "subscribesave", label: "Subscribe & Save", glyph: "container", build: () =>
+      Box("Subscribe & Save", [T("One time", { fontSize: "12px", color: "#9ca3af", textAlign: "center" }), Btn("Subscribe", { width: "100%", background: "#2563eb" })],
+        { padding: "16px", border: "1px solid #e5e7eb", borderRadius: "12px", gap: "8px" }) },
+
+  /* bundles */
+  { key: "collectionbundle", label: "Collection Bundle Builder", glyph: "grid", build: () => bundleBuilder("Collection Bundle Builder") },
+  { key: "pdpbundle", label: "PDP Bundle Builder", glyph: "grid", build: () => bundleBuilder("PDP Bundle Builder") },
+
+  /* third-party apps (visual placeholders, wire to the real app later) */
+  { key: "stayai", label: "Stay Ai Subscription", glyph: "container", build: () =>
+      Box("Stay Ai Subscription", [T("♥ Subscribe & save", { fontWeight: "700", color: "#e11d48", fontSize: "18px" }), planList()], { gap: "12px" }) },
+  { key: "okendoreviews", label: "Okendo Reviews", glyph: "rating", build: () => reviewsWidget("Okendo") },
+  { key: "okendorating", label: "Okendo Product Rating", glyph: "rating", build: () => ratingLine("Okendo") },
+  { key: "junipreviews", label: "Junip Product Reviews", glyph: "rating", build: () => reviewsWidget("Junip") },
+  { key: "juniprating", label: "Junip Product Rating", glyph: "rating", build: () => ratingLine("Junip") },
+  { key: "yotporeviews", label: "Yotpo Reviews", glyph: "rating", build: () => reviewsWidget("Yotpo") },
+  { key: "yotporating", label: "Yotpo Product Rating", glyph: "rating", build: () => ratingLine("Yotpo") },
+  { key: "looxreviews", label: "Loox Reviews", glyph: "rating", build: () => reviewsWidget("Loox") },
+  { key: "looxrating", label: "Loox Product Rating", glyph: "rating", build: () => ratingLine("Loox") },
+  { key: "judgemereviews", label: "Judge.me Reviews", glyph: "rating", build: () => reviewsWidget("Judge.me") },
+  { key: "judgemerating", label: "Judge.me Product Rating", glyph: "rating", build: () => ratingLine("Judge.me") },
+  { key: "stampedreviews", label: "Stamped Reviews", glyph: "rating", build: () => reviewsWidget("Stamped") },
+  { key: "stampedrating", label: "Stamped Product Rating", glyph: "rating", build: () => ratingLine("Stamped") },
+  { key: "klaviyoreviews", label: "Klaviyo Reviews", glyph: "rating", build: () => reviewsWidget("Klaviyo") },
+  { key: "klaviyorating", label: "Klaviyo Product Rating", glyph: "rating", build: () => ratingLine("Klaviyo") },
+];
+
+/* register them once (skips keys that already exist, safe on hot reload) */
+SHOPIFY_COMPONENTS.forEach((c) => { if (!COMPONENTS.some((x) => x.key === c.key)) COMPONENTS.push(c); });
+
+/* ======================================================================
+   BLOCK 2: UI / INTERACTIVE / EMBED / APP COMPONENTS
+   Paste this RIGHT AFTER the first block (after the line
+   `SHOPIFY_COMPONENTS.forEach(...)`). It uses the same helpers
+   (node, T, H, Btn, Box, Row, Img, Stars, grid, ph, buildSlider, BORDER).
+   No renderer changes needed. These are static visual versions, so they can
+   be dragged, styled, hidden per device, exported and counted like any other.
+   ====================================================================== */
+
+const dot = (on) => node("circle", "Dot", {}, { width: "10px", height: "10px", borderRadius: "9999px", background: on ? "#2563eb" : "#d1d5db", flexShrink: "0" });
+const arrowBtn = (name, glyph) =>
+  node("button", name, { text: glyph, action: { type: "none", value: "" } },
+    { width: "40px", height: "40px", borderRadius: "9999px", border: "none", background: "#2563eb", color: "#ffffff", fontSize: "20px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: "0" });
+const placeholderBox = (name, title, hint, extra = {}) =>
+  Box(name, [T(title, { fontWeight: "700", color: "#111827", textAlign: "center" }), T(hint, { fontSize: "13px", color: "#6b7280", textAlign: "center" })],
+    { padding: "32px", border: "1px dashed #9ca3af", borderRadius: "12px", background: "#f9fafb", alignItems: "center", justifyContent: "center", gap: "6px", minHeight: "120px", ...extra });
+const panel = (title, body) =>
+  Box("Panel", [H(title, 18, { fontWeight: "600" }, { fontSize: "18px" }, "h3"), T(body)], { gap: "8px", padding: "16px 0", borderBottom: "1px solid #e5e7eb" });
+const slideCard = (i) => Img(ph(900, 600, "Slide " + i), { height: "auto", aspectRatio: "3 / 2" });
+const carouselShell = (name, perView, withDots = true) => {
+  const s = buildSlider();
+  s.name = name;
+  s.props.perView = perView;
+  s.props.perViewTablet = Math.min(perView, 2);
+  s.props.perViewMobile = 1;
+  s.props.gap = perView > 1 ? 16 : 0;
+  s.props.slides = [1, 2, 3, 4, 5].map(newSlide);
+  s.props.dots = withDots;
+  return s;
+};
+
+const SHOPIFY_COMPONENTS_2 = [
+  /* ---- UI elements ---- */
+  { key: "spinner", label: "Spinner", glyph: "circle", build: () =>
+      node("circle", "Spinner", {}, { width: "40px", height: "40px", borderRadius: "9999px", background: "transparent", border: "4px solid #dbeafe", borderTopColor: "#2563eb" }) },
+  { key: "ticker", label: "Ticker", glyph: "text", build: () =>
+      Row("Ticker", ["Free shipping", "30-day returns", "Secure checkout", "Free shipping", "30-day returns"].map((t) => T(t + "  •", { fontWeight: "600", color: "#ffffff", whiteSpace: "nowrap" })),
+        { background: "#2563eb", padding: "12px 16px", gap: "24px", overflow: "hidden", alignItems: "center" }, { flexDirection: "row" }) },
+  { key: "switch", label: "Switch", glyph: "container", build: () =>
+      Row("Switch", [node("circle", "Knob", {}, { width: "20px", height: "20px", borderRadius: "9999px", background: "#ffffff" })],
+        { width: "44px", height: "24px", padding: "2px", background: "#2563eb", borderRadius: "9999px", justifyContent: "flex-end", alignItems: "center", cursor: "pointer" }, { flexDirection: "row" }) },
+  { key: "radio", label: "Radio Button", glyph: "circle", build: () =>
+      Row("Radio Button", [
+        node("circle", "Radio", {}, { width: "20px", height: "20px", borderRadius: "9999px", border: "6px solid #2563eb", background: "#ffffff", flexShrink: "0" }),
+        T("Option", { color: "#111827" }),
+      ], { alignItems: "center", gap: "10px", width: "auto" }, { flexDirection: "row" }) },
+  { key: "collapsible", label: "Collapsible", glyph: "container", build: () =>
+      Box("Collapsible", [
+        Row("Header", [H("Collapsible title", 18, { fontWeight: "600" }, { fontSize: "18px" }, "h3"), T("▾", { color: "#6b7280" })], { justifyContent: "space-between", alignItems: "center", cursor: "pointer" }, { flexDirection: "row" }),
+        T("Hidden content goes here. Replace it with your own text."),
+      ], { padding: "16px", border: "1px solid #e5e7eb", borderRadius: "8px", gap: "10px" }) },
+  { key: "tabstop", label: "Tabs (Top)", glyph: "container", build: () =>
+      Box("Tabs (Top)", [
+        Row("Tab Bar", ["Tab 1", "Tab 2", "Tab 3"].map((t, i) =>
+          T(t, { padding: "10px 16px", fontWeight: "600", color: i === 0 ? "#2563eb" : "#6b7280", borderBottom: i === 0 ? "2px solid #2563eb" : "2px solid transparent", cursor: "pointer" })),
+          { gap: "0px", borderBottom: "1px solid #e5e7eb" }, { flexDirection: "row" }),
+        Box("Tab Content", [T("Content for the first tab.")], { padding: "16px 0" }),
+      ], { gap: "0px" }) },
+  { key: "tabsleft", label: "Tabs (Left)", glyph: "container", build: () =>
+      Row("Tabs (Left)", [
+        Box("Tab List", ["Tab 1", "Tab 2", "Tab 3"].map((t, i) =>
+          T(t, { padding: "10px 16px", fontWeight: "600", color: i === 0 ? "#2563eb" : "#6b7280", borderLeft: i === 0 ? "2px solid #2563eb" : "2px solid #e5e7eb", cursor: "pointer" })),
+          { width: "160px", gap: "0px", flexShrink: "0" }),
+        Box("Tab Content", [T("Content for the first tab.")], { flex: "1", padding: "0 16px" }),
+      ], { gap: "16px" }, { gap: "12px" }) },
+  { key: "accordion", label: "Accordion", glyph: "list", build: () =>
+      Box("Accordion", ["First question", "Second question", "Third question"].map((q) =>
+        Box("Accordion Item", [
+          Row("Header", [H(q, 18, { fontWeight: "600" }, { fontSize: "18px" }, "h3"), T("▾", { color: "#6b7280" })], { justifyContent: "space-between", alignItems: "center", cursor: "pointer" }, { flexDirection: "row" }),
+          T("Answer text goes here."),
+        ], { padding: "16px 0", borderBottom: "1px solid #e5e7eb", gap: "8px" })), { gap: "0px" }) },
+  { key: "countdown", label: "Countdown Timer", glyph: "text", build: () =>
+      Row("Countdown Timer", [["19", "Hours"], ["20", "Mins"], ["45", "Secs"]].map(([n, l]) =>
+        Box("Unit", [T(n, { fontSize: "36px", fontWeight: "700", color: "#2563eb", textAlign: "center", lineHeight: "1" }), T(l, { fontSize: "12px", color: "#6b7280", textAlign: "center" })],
+          { alignItems: "center", gap: "4px", padding: "12px 16px", background: "#eff6ff", borderRadius: "8px", width: "auto" })),
+        { gap: "12px", justifyContent: "center" }, { flexDirection: "row" }) },
+  { key: "popup", label: "Popup", glyph: "container", build: () =>
+      Box("Popup", [
+        T("✕", { textAlign: "right", color: "#6b7280", cursor: "pointer" }),
+        H("Get 10% off", 28, { textAlign: "center" }, { fontSize: "24px" }),
+        T("Join our list and save on your first order.", { textAlign: "center" }),
+        Btn("Claim offer", { width: "100%" }),
+      ], { maxWidth: "420px", margin: "0 auto", padding: "24px", background: "#ffffff", borderRadius: "16px", boxShadow: "0 20px 40px rgba(0,0,0,.2)", gap: "12px" }) },
+  { key: "tooltip", label: "Tooltip", glyph: "text", build: () =>
+      Box("Tooltip", [
+        T("Helpful hint appears here", { background: "#111827", color: "#ffffff", fontSize: "13px", padding: "8px 12px", borderRadius: "6px", width: "fit-content" }),
+        T("▼", { color: "#111827", fontSize: "10px", paddingLeft: "16px", lineHeight: "1" }),
+      ], { gap: "0px", width: "fit-content" }) },
+
+  /* ---- Carousels ---- */
+  { key: "carouselsingle", label: "Single-Slide Carousel", glyph: "slider", build: () => carouselShell("Single-Slide Carousel", 1) },
+  { key: "carouselmulti", label: "Multi-slide Carousel", glyph: "slider", build: () => carouselShell("Multi-slide Carousel", 3) },
+  { key: "carouselcentered", label: "Centered Carousel", glyph: "slider", build: () => {
+      const s = carouselShell("Centered Carousel", 3);
+      s.s.base.maxWidth = "960px"; s.s.base.margin = "0 auto";
+      return s;
+    } },
+  { key: "carouselnext", label: "Carousel Next", glyph: "button", build: () => arrowBtn("Carousel Next", "›") },
+  { key: "carouselprev", label: "Carousel Previous", glyph: "button", build: () => arrowBtn("Carousel Previous", "‹") },
+  { key: "carouselindicators", label: "Carousel Indicators", glyph: "circle", build: () =>
+      Row("Carousel Indicators", [dot(true), dot(false), dot(false)], { gap: "8px", justifyContent: "center", alignItems: "center" }, { flexDirection: "row" }) },
+  { key: "carouselcounter", label: "Carousel Panels Counter", glyph: "text", build: () =>
+      T("1 / 2", { fontSize: "24px", fontWeight: "700", color: "#2563eb", textAlign: "center" }) },
+  { key: "beforeafter", label: "Before/After Slider", glyph: "slider", build: () =>
+      Row("Before/After Slider", [
+        Box("Before", [Img(ph(600, 600, "Before"), { height: "auto", aspectRatio: "1 / 1" }), T("Before", { textAlign: "center", fontWeight: "600", color: "#111827" })], { flex: "1", gap: "8px" }),
+        Box("After", [Img(ph(600, 600, "After"), { height: "auto", aspectRatio: "1 / 1" }), T("After", { textAlign: "center", fontWeight: "600", color: "#111827" })], { flex: "1", gap: "8px" }),
+      ], { gap: "16px" }, { gap: "12px" }) },
+
+  /* ---- social / media embeds (placeholders) ---- */
+  { key: "tiktok", label: "TikTok", glyph: "image", build: () => placeholderBox("TikTok", "TikTok embed", "Paste your TikTok video URL in the Config tab.", { background: "#111827", color: "#ffffff" }) },
+  { key: "klaviyoform", label: "Klaviyo Form Embed", glyph: "container", build: () =>
+      Box("Klaviyo Form Embed", [H("Join our newsletter", 24, { textAlign: "center" }), T("Enter your email", { padding: "12px", border: BORDER, borderRadius: "8px", color: "#9ca3af" }), Btn("Subscribe", { width: "100%", background: "#2563eb" })],
+        { padding: "24px", background: "#eef2ff", borderRadius: "12px", gap: "12px" }) },
+  { key: "googlemaps", label: "Google Maps Embed", glyph: "image", build: () =>
+      placeholderBox("Google Maps Embed", "📍 Google Maps", "Map embed placeholder. Add your location in Config.", { minHeight: "320px" }) },
+
+  /* ---- Shopify / theme blocks ---- */
+  { key: "shopifysection", label: "Section", glyph: "container", build: () =>
+      placeholderBox("Shopify Section", "Shopify Section", "Renders a theme section from your Shopify store.") },
+  { key: "appthemeblock", label: "App and Theme Block", glyph: "container", build: () =>
+      placeholderBox("App and Theme Block", "App / Theme Block", "Renders an app or theme block from your Shopify store.") },
+  { key: "liquid", label: "Liquid", glyph: "text", build: () =>
+      placeholderBox("Liquid", "{ } Liquid", "Liquid code runs on Shopify only. Not rendered in this editor.", { fontFamily: "monospace" }) },
+  { key: "customcode", label: "Custom Code", glyph: "text", build: () =>
+      placeholderBox("Custom Code", "</> Custom Code", "Custom HTML / CSS / JS block. Not rendered in this editor.", { fontFamily: "monospace" }) },
+
+  /* ---- third-party apps (placeholders) ---- */
+  { key: "knocommerce", label: "KnoCommerce", glyph: "container", build: () =>
+      placeholderBox("KnoCommerce", "KnoCommerce survey", "Post-purchase survey from KnoCommerce.") },
+  { key: "rebuybundles", label: "Rebuy Dynamic Bundles", glyph: "grid", build: () =>
+      Box("Rebuy Dynamic Bundles", [
+        Row("Bundle", [1, 2].map((i) => Img(ph(300, 300, "Product " + i), { width: "120px", height: "120px", flexShrink: "0" })), { gap: "12px", alignItems: "center" }, { flexDirection: "row" }),
+        T("Total: $20.00", { fontWeight: "600", color: "#111827" }),
+        Btn("Add Bundle to Cart", { width: "100%", background: "#7c3aed" }),
+      ], { padding: "16px", border: "1px solid #e5e7eb", borderRadius: "12px", gap: "12px" }) },
+  { key: "rebuyhome", label: "Rebuy Home Page Widget", glyph: "grid", build: () =>
+      Box("Rebuy Home Page Widget", [H("Recommended for you", 24, {}, { fontSize: "20px" }), grid("Products", 3, [1, 2, 3].map((i) =>
+        Box("Product", [Img(ph(400, 400, "Product " + i), { height: "auto", aspectRatio: "1 / 1" }), T("$19.99"), Btn("Add to cart", { background: "#7c3aed", width: "100%", padding: "10px" })], { gap: "8px" })))], { gap: "16px" }) },
+  { key: "rebuyproductadd", label: "Rebuy Product Add-ons", glyph: "list", build: () =>
+      Box("Rebuy Product Add-ons", [T("Add to your order", { fontWeight: "600", color: "#111827" }),
+        Row("Add-on", [Img(ph(120, 120, ""), { width: "56px", height: "56px", flexShrink: "0" }), T("Add-on product", { flex: "1", color: "#111827" }), Btn("Add", { background: "#7c3aed", padding: "8px 16px" })], { alignItems: "center", gap: "12px" }, { flexDirection: "row" })],
+        { padding: "16px", border: "1px solid #e5e7eb", borderRadius: "12px", gap: "12px" }) },
+  { key: "rebuyproductpage1", label: "Rebuy Product Page Widget", glyph: "grid", build: () =>
+      Box("Rebuy Product Page Widget", [T("You may also like", { fontWeight: "700", color: "#111827" }), grid("Products", 2, [1, 2].map((i) =>
+        Box("Product", [Img(ph(300, 300, "Product " + i), { height: "auto", aspectRatio: "1 / 1" }), Btn("Add", { background: "#7c3aed", width: "100%", padding: "10px" })], { gap: "8px" })))], { gap: "12px" }) },
+  { key: "rebuyproductpage2", label: "Rebuy Product Page Upsell", glyph: "list", build: () =>
+      Box("Rebuy Product Page Upsell", [T("Frequently bought together", { fontWeight: "700", color: "#111827" }),
+        Row("Upsell", [Img(ph(120, 120, ""), { width: "56px", height: "56px", flexShrink: "0" }), T("Upsell product", { flex: "1", color: "#111827" }), T("$9.99", { fontWeight: "600", color: "#111827" })], { alignItems: "center", gap: "12px" }, { flexDirection: "row" }),
+        Btn("Upgrade", { background: "#7c3aed", width: "100%" })], { padding: "16px", border: "1px solid #e5e7eb", borderRadius: "12px", gap: "12px" }) },
+];
+
+SHOPIFY_COMPONENTS_2.forEach((c) => { if (!COMPONENTS.some((x) => x.key === c.key)) COMPONENTS.push(c); });
 
 /* ----------------------------- sections ---------------------------- */
 const faq = (q, a) => Box("FAQ Item", [H(q, 18, { fontWeight: "600" }, { fontSize: "18px" }, "h3"), T(a), node("hr", "Divider", {}, { width: "100%", height: "1px", background: "#e5e7eb", border: "none" })], { gap: "8px" });
@@ -1098,14 +1424,17 @@ function ComponentsPanel() {
   return (
     <>
       <SearchBox value={q} onChange={setQ} placeholder="Search components…" />
-      <p className="mt-2 text-[11px] text-gray-500">Drag a component onto the canvas and drop it where you want it.</p>
+      <p className="mt-2 text-[11px] text-gray-500">
+        {q ? `${list.length} of ${COMPONENTS.length} components` : `${COMPONENTS.length} components`}. Drag one onto the canvas and drop it where you want it.
+      </p>
       <div className="mt-2 grid min-h-0 flex-1 grid-cols-2 content-start gap-2 overflow-y-auto pr-1">
         {list.map((c) => (
           <div key={c.key} draggable
             onDragStart={(e) => { e.dataTransfer.setData("text/x-comp", c.key); e.dataTransfer.effectAllowed = "copy"; }}
-            className="flex h-[84px] cursor-grab flex-col items-center justify-center gap-1 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 hover:border-blue-400 hover:bg-blue-50 active:cursor-grabbing">
+            title={c.label}
+            className="flex h-[84px] cursor-grab flex-col items-center justify-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-1 text-gray-700 hover:border-blue-400 hover:bg-blue-50 active:cursor-grabbing">
             <span className="text-blue-600"><Ico n={c.glyph} size={20} /></span>
-            <span className="text-[11px]">{c.label}</span>
+            <span className="line-clamp-2 text-center text-[11px] leading-tight">{c.label}</span>
           </div>
         ))}
         {!list.length && <p className="col-span-2 p-2 text-xs text-gray-500">No components found.</p>}
