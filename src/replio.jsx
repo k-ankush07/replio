@@ -682,17 +682,45 @@ const SECTIONS = [
   {
     id: "hero", name: "Hero", desc: "Grab attention", items: [
       {
-        name: "Split hero", build: () => Row("Hero Section", [
-          Box("Hero Copy", [H("Everything your customers need, in one place", 52, {}, {}, "h1"), T("One clear sentence about why this product is worth buying today.", { fontSize: "18px" }), Btn("Shop now")], { flex: "1", justifyContent: "center" }),
-          Img(ph(900, 700, "Hero image"), { flex: "1", height: "460px" }),
-        ], { padding: "64px 48px", gap: "48px", alignItems: "center", background: "#f9fafb" }, { padding: "32px 20px", gap: "24px" })
+        name: "Split hero", build: () => {
+          const lifestyleImage = "https://cdn.shopify.com/s/files/1/0638/4140/3067/files/hero_long.png?v=1740088169";
+          return Row("Hero Section", [
+            Box("Hero Copy", [
+              T("NEW COLLECTION", { color: "#6b7280", fontWeight: "700", fontSize: "11px", letterSpacing: "1.8px" }),
+              H("Meet Your New Everyday Essentials", 46, { lineHeight: "1.08" }, { fontSize: "26px" }, "h1"),
+              T("Discover our range of products, thoughtfully designed to make your life easier and more beautiful.", { fontSize: "16px", maxWidth: "390px" }),
+              Btn("Shop Now", { width: "150px", padding: "12px 20px", fontSize: "13px" }),
+            ], { flex: "1", justifyContent: "center", alignItems: "flex-start", gap: "14px", padding: "16px 24px" }),
+            Img(lifestyleImage, { flex: "1", height: "520px", objectFit: "cover", borderRadius: "0" }),
+          ], { minHeight: "520px", padding: "0", gap: "0", alignItems: "stretch", background: "#ffffff" }, { padding: "32px 20px", gap: "24px" });
+        }
       },
       {
-        name: "Centered hero", build: () => Box("Hero Section", [
-          H("Make your headline count", 56, { textAlign: "center" }, {}, "h1"),
-          T("Back it up with one honest sentence.", { fontSize: "20px", textAlign: "center", maxWidth: "640px" }),
-          Btn("Get started"), Img(ph(1200, 500, "Product shot"), { height: "380px" }),
-        ], { padding: "80px 48px", alignItems: "center", gap: "24px" }, { padding: "40px 20px" })
+        name: "Centered hero", build: () => {
+          const lifestyleImage = "https://cdn.shopify.com/s/files/1/0638/4140/3067/files/hero_long.png?v=1740088169";
+          return Box("Hero Section", [
+            Img(lifestyleImage, { width: "100%", height: "520px", objectFit: "cover", borderRadius: "0" }),
+            Box("Hero Card", [
+              H("Meet Your New Everyday Essentials", 38, { textAlign: "center", lineHeight: "1.05" }, { fontSize: "26px" }, "h1"),
+              T("Discover our range of products, thoughtfully designed to make your life easier and more beautiful.", { textAlign: "center", fontSize: "15px", maxWidth: "360px" }),
+              Btn("Shop Now", { width: "160px", padding: "12px 24px", fontSize: "13px" }),
+            ], { position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)", width: "420px", maxWidth: "70%", alignItems: "center", padding: "32px", background: "#ffffff", borderRadius: "8px", boxShadow: "0 16px 40px rgba(15,23,42,0.12)", gap: "14px", zIndex: "2" }),
+          ], { position: "relative", height: "520px", minHeight: "520px", overflow: "hidden", background: "#d8d4ce" }, { height: "420px", minHeight: "420px" });
+        }
+      },
+      {
+        name: "Left card hero", build: () => {
+          const lifestyleImage = "https://cdn.shopify.com/s/files/1/0638/4140/3067/files/hero_long.png?v=1740088169";
+          return Box("Hero Section", [
+            Img(lifestyleImage, { width: "100%", height: "520px", borderRadius: "0", objectFit: "cover" }),
+            Box("Hero Card", [
+              T("NEW COLLECTION", { color: "#ffffff", fontWeight: "700", fontSize: "12px", letterSpacing: "2px" }),
+              H("Meet Your New Everyday Essentials", 38, { color: "#ffffff", lineHeight: "1.05" }, { fontSize: "26px" }, "h1"),
+              T("Discover our range of products, thoughtfully designed to make your life easier and more beautiful.", { color: "#ffffff", fontSize: "15px", maxWidth: "340px" }),
+              Btn("Shop the collection", { width: "180px", padding: "12px 24px", fontSize: "13px", background: "#ffffff", color: "#111827" }),
+            ], { position: "absolute", left: "8%", top: "50%", transform: "translateY(-50%)", width: "400px", maxWidth: "70%", alignItems: "flex-start", padding: "32px", background: "transparent", borderRadius: "0", color: "#ffffff", boxShadow: "none", gap: "14px", zIndex: "2" }),
+          ], { position: "relative", height: "520px", minHeight: "520px", overflow: "hidden", background: "#d8d4ce" }, { height: "420px", minHeight: "420px" });
+        }
       },
     ]
   },
@@ -700,6 +728,56 @@ const SECTIONS = [
     id: "banners", name: "Banners", desc: "Drive urgency", items: [
       { name: "Announcement bar", build: () => Box("Announcement", [T("Free shipping on orders over $50", { color: "#ffffff", textAlign: "center", fontWeight: "600", fontSize: "14px" })], { background: "#111827", padding: "10px 16px" }) },
       { name: "Sale banner", build: () => Row("Sale Banner", [T("Autumn sale: 20% off everything", { color: "#7c2d12", fontWeight: "700", fontSize: "18px" }), Btn("Shop the sale", { padding: "10px 20px" })], { background: "#fed7aa", padding: "16px 32px", alignItems: "center", justifyContent: "center", gap: "20px" }) },
+      {
+        name: "Ticker C1",
+        build: () => Row("Ticker C1", [
+          T("Money-Back Guarantee", { color: "#111827", textAlign: "center", fontWeight: "700", fontSize: "13px" }),
+          T("Free Shipping", { color: "#111827", textAlign: "center", fontWeight: "700", fontSize: "13px" }),
+          T("Secure Checkout", { color: "#111827", textAlign: "center", fontWeight: "700", fontSize: "13px" }),
+        ], { background: "#ffffff", borderTop: "1px solid #e5e7eb", borderBottom: "1px solid #e5e7eb", padding: "12px 16px", gap: "12px", alignItems: "center", justifyContent: "space-around" }, { flexDirection: "row", gap: "8px" })
+      },
+      {
+        name: "Promo Banner C5",
+        build: () => Row("Promo Banner C5", [
+          T("Extra 20% off selected items", { color: "#ffffff", fontWeight: "700", fontSize: "14px" }),
+          Btn("Shop sale", { background: "#ffffff", color: "#111827", padding: "8px 16px", fontSize: "12px" }),
+        ], { background: "#111827", padding: "14px 24px", alignItems: "center", justifyContent: "space-between", gap: "16px" }, { flexDirection: "row", gap: "12px" })
+      },
+      {
+        name: "Promo Banner C4",
+        build: () => Box("Promo Banner C4", [
+          T("SPRING EVENT", { color: "#6b7280", fontWeight: "700", fontSize: "11px", letterSpacing: "1.5px", textAlign: "center" }),
+          H("Save 25% today", 28, { textAlign: "center" }, { fontSize: "22px" }, "h3"),
+          Btn("Shop the offer", { background: "#111827", color: "#ffffff", width: "180px", padding: "10px 18px", fontSize: "12px" }),
+        ], { background: "#f7f4ef", padding: "36px 24px", alignItems: "center", gap: "10px" })
+      },
+      {
+        name: "Promo Banner C3",
+        build: () => Row("Promo Banner C3", [
+          Box("Offer Copy", [
+            T("LIMITED TIME", { color: "#d1d5db", fontWeight: "700", fontSize: "10px", letterSpacing: "1.4px" }),
+            H("The best sale of the season", 32, { color: "#ffffff" }, { fontSize: "22px" }, "h3"),
+          ], { flex: "1", gap: "8px" }),
+          Btn("Shop now", { background: "#ffffff", color: "#111827", width: "140px", padding: "10px 16px", fontSize: "12px" }),
+        ], { background: "#1f2937", padding: "28px 32px", alignItems: "center", justifyContent: "space-between", gap: "24px" }, { padding: "24px 20px", gap: "16px" })
+      },
+      {
+        name: "Promo Banner C2",
+        build: () => Box("Promo Banner C2", [
+          T("TODAY ONLY", { color: "#111827", fontWeight: "700", fontSize: "11px", letterSpacing: "1.5px", textAlign: "center" }),
+          H("20% off everything", 36, { color: "#111827", textAlign: "center" }, { fontSize: "26px" }, "h2"),
+          T("Use code SAVE20 at checkout.", { color: "#4b5563", textAlign: "center", fontSize: "13px" }),
+          Btn("Shop now", { width: "150px", padding: "10px 18px", fontSize: "12px" }),
+        ], { background: "#fbbf24", padding: "40px 24px", alignItems: "center", gap: "10px" })
+      },
+      {
+        name: "Promo Banner C1",
+        build: () => Row("Promo Banner C1", [
+          T("Free shipping", { color: "#ffffff", fontWeight: "700", fontSize: "15px", textAlign: "center" }),
+          T("Free returns", { color: "#ffffff", fontWeight: "700", fontSize: "15px", textAlign: "center" }),
+          T("Secure checkout", { color: "#ffffff", fontWeight: "700", fontSize: "15px", textAlign: "center" }),
+        ], { background: "#065f46", padding: "16px 24px", gap: "16px", alignItems: "center", justifyContent: "space-around" }, { flexDirection: "row", gap: "8px" })
+      },
     ]
   },
   {
@@ -2705,19 +2783,27 @@ function FontPicker({ value, onChange, api }) {
 function SectionThumbnail({ item }) {
   const [sample] = useState(() => item.build());
   const [height, setHeight] = useState(20);
+  const [scale, setScale] = useState(0.2);
+  const frameRef = useRef(null);
   const contentRef = useRef(null);
   useEffect(() => {
+    const frame = frameRef.current;
     const content = contentRef.current;
-    if (!content) return;
-    const updateHeight = () => setHeight(Math.max(20, Math.min(120, content.offsetHeight * 0.2)));
-    const observer = new ResizeObserver(updateHeight);
+    if (!frame || !content) return;
+    const updateSize = () => {
+      const nextScale = frame.clientWidth > 0 ? Math.min(1, frame.clientWidth / 1000) : 0.2;
+      setScale(nextScale);
+      setHeight(Math.max(20, Math.min(180, content.offsetHeight * nextScale)));
+    };
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(frame);
     observer.observe(content);
-    updateHeight();
+    updateSize();
     return () => observer.disconnect();
   }, []);
   return (
-    <div className="rp-frame pointer-events-none relative overflow-hidden bg-white" style={{ height }}>
-      <div ref={contentRef} className="absolute left-0 top-0 w-[1000px] origin-top-left" style={{ transform: "scale(0.2)" }}>
+    <div ref={frameRef} className="rp-frame pointer-events-none relative overflow-hidden bg-white" style={{ height }}>
+      <div ref={contentRef} className="absolute left-0 top-0 w-[1000px] origin-top-left" style={{ transform: `scale(${scale})` }}>
         <Ctx.Provider value={{ preview: true, thumbnail: true }}>
           <Render n={sample} device="desktop" />
         </Ctx.Provider>
