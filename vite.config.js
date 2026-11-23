@@ -6,7 +6,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   server: {
     allowedHosts: [
-      'thousands-chapel-description-dat.trycloudflare.com',
+      'stingily-elusive-enjoyably.ngrok-free.dev',
     ],
   },
   plugins: [
